@@ -1,18 +1,18 @@
 import argparse
-import pandas as pd
 from training.test import e2e_test
+from training.get_data import check_data_exists
+from training.prep_data import e2e_data
 from training.train import e2e_train
-from training.prep_data import e2e_data, check_data_exists
-from rpunct.punctuate import run_rpunct
+from rpunct.rpunct_recoverer import rpunct_main
 
 
 # Parser
 parser = argparse.ArgumentParser(description='Global run file to execute dataset preparation, model training, and testing.')
-subparsers = parser.add_subparsers(help="Specify which stage of the ML process to be executed: data preparation (`data`), training (`train`), testing (`test`), or inference (`punct`).", dest="stage")
+subparsers = parser.add_subparsers(help="Specify which stage of the ML process to be executed: data preparation (`data`), training (`train`), testing (`test`), or inference (`rpunct`).", dest="stage")
 data_parser = subparsers.add_parser('data', help='Execute data preparation process.')
 train_parser = subparsers.add_parser('train', help='Execute model training process.')
 test_parser = subparsers.add_parser('test', help='Execute model testing process.')
-punct_parser = subparsers.add_parser('punct', help='Run rpunct on a given input of plaintext.')
+punct_parser = subparsers.add_parser('rpunct', help='Run rpunct on a given input of plaintext.')
 
 # Data subparsers
 data_source_subparsers = data_parser.add_subparsers(help="Specify type of data to be prepared.", dest="data")
@@ -22,15 +22,24 @@ transcripts_data_subparser = data_source_subparsers.add_parser('news-transcripts
 subtitles_data_subparser = data_source_subparsers.add_parser('subtitles', help='BBC subtitles (all genres) dataset.')
 composite_data_subparser = data_source_subparsers.add_parser('composite', help='Composite dataset including data from multiple sources (e.g. articles and transcripts).')
 
-# Data arguments
+
+# Data preparation stage arguments
 data_parser.add_argument(
-    '-sp',
-    '--split',
+    '-t',
+    '--train_split',
     metavar='TRAIN:TEST',
     action='store',
     type=str,
     default='95:5',
     help="Specify the train-test split to be implemented (TRAIN perc. of data for training, TEST for testing) - default is 95:5."
+)
+
+data_parser.add_argument(
+    '-p',
+    '--print_stats',
+    action='store_true',
+    default=False,
+    help="Print label distribution statistics about the test dataset - default hides stats."
 )
 
 news_data_subparser.add_argument(
@@ -54,8 +63,8 @@ news_data_subparser.add_argument(
 )
 
 news_data_subparser.add_argument(
-    '-sm',
-    '--sum',
+    '-r',
+    '--summaries',
     action='store_true',
     default=False,
     help="Toggle between BBC News article summaries and bodies - default is bodies."
@@ -83,14 +92,14 @@ composite_data_subparser.add_argument(
 )
 
 
-# Training arguments
+# Model training stage arguments
 train_parser.add_argument(
     '-d',
     '--data',
     metavar='DATA',
     type=str,
-    choices=['reviews', 'news-summaries', 'composite', 'composite-news-int', 'composite-news-dist', 'news-transcripts', 'subtitles'].extend([f'news-{start}-{end}' for start in range(2014, 2023) for end in range(2014, 2023)]),
-    default='news-2014-2022',
+    choices=['reviews', 'news-summaries', 'composite', 'news-transcripts', 'subtitles'].extend([f'news-{start}-{end}' for start in range(2014, 2023) for end in range(2014, 2023)]),
+    default='news-transcripts',
     help="Specify the (path to the) dataset to be used to test the model: BBC News (`news-startyr-endyr`) or Yelp reviews (`reviews`) - default is BBC News 2014-2022."
 )
 
@@ -113,11 +122,11 @@ train_parser.add_argument(
 )
 
 train_parser.add_argument(
-    '-c',
-    '--cuda',
+    '-g',
+    '--gpu',
     action='store_true',
     default=False,
-    help="Toggle between training on a GPU using CUDA or on the CPU - default is CPU."
+    help="Toggle between training on a GPU or on the CPU - default is CPU."
 )
 
 train_parser.add_argument(
@@ -128,15 +137,8 @@ train_parser.add_argument(
     help="Output a plot of the convergence of the training/validation loss function - default is off."
 )
 
-train_parser.add_argument(
-    '-s',
-    '--stats',
-    action='store_true',
-    default=False,
-    help="Print label distribution statistics about the test dataset - default hides stats."
-)
 
-# Testing arguments
+# Model testing stage arguments
 test_parser.add_argument(
     'models',
     metavar='MODEL',
@@ -151,8 +153,8 @@ test_parser.add_argument(
     '--data',
     metavar='DATA',
     type=str,
-    choices=['reviews', 'news-summaries', 'news-sum', 'composite-news-int', 'composite-news-dist', 'comp-news', 'news-transcripts', 'news-trans', 'subtitles'].extend([f'news-{start}-{end}' for start in range(2014, 2023) for end in range(2014, 2023)]),
-    default='news-2014-2022',
+    choices=['reviews', 'news-summaries', 'news-sum', 'composite', 'news-transcripts', 'news-trans', 'subtitles'].extend([f'news-{start}-{end}' for start in range(2014, 2023) for end in range(2014, 2023)]),
+    default='news-transcripts',
     help="Specify the (path to the) dataset to be used to test the model: BBC News (`news-startyr-endyr`) or Yelp reviews (`reviews`) - default is BBC News 2014-2022."
 )
 
@@ -166,22 +168,15 @@ test_parser.add_argument(
 )
 
 test_parser.add_argument(
-    '-c',
-    '--cuda',
+    '-g',
+    '--gpu',
     action='store_true',
     default=False,
-    help="Toggle between training on a GPU using CUDA or on the CPU - default is CPU."
+    help="Toggle between training on a GPU or on the CPU - default is CPU."
 )
 
-test_parser.add_argument(
-    '-s',
-    '--stats',
-    action='store_true',
-    default=False,
-    help="Print label distribution statistics about the test dataset - default hides stats."
-)
 
-# Punctuate arguments
+# RPunct inference stage arguments
 punct_parser.add_argument(
     '-m',
     '--model',
@@ -212,109 +207,113 @@ punct_parser.add_argument(
 )
 
 punct_parser.add_argument(
-    '-c',
-    '--cuda',
+    '-g',
+    '--gpu',
     action='store_true',
     default=False,
-    help="Toggle between training on a GPU using CUDA or on the CPU - default is CPU."
+    help="Toggle between training on a GPU or on the CPU - default is CPU."
 )
 
 
+# Logic to parse input arguments from command line and execute the RPunct stage (data/train/test/inference)
 if __name__ == "__main__":
     # Parse these arguments
     args = parser.parse_args()
     print("\n> Arguments:", end='\n\n')
-    print(pd.Series(vars(args)))
+    for k in vars(args): print(f'{k}: {vars(args)[k]}')
 
-    # if calling for inference, run punctuate.py function
-    if args.stage == 'punct':
-        # generate instance of rpunct model and run text through it
-        run_rpunct(
-            use_cuda=args.cuda,
+    # Inference stage
+    if args.stage == 'rpunct':
+        # Generate instance of RPunct model and use to punctuate input (rpunct_recoverer.py)
+        rpunct_main(
+            model_location=args.model,
             input_txt=args.input,
             output_txt=args.output,
-            model_location=args.model
+            use_cuda=args.gpu
         )
 
-    else:
-        # Run the pipeline for the ML processing stage selected (data prep, train, test)
-        if args.stage == 'data':
-            # error checking
-            if args.data == 'news-articles':
-                if args.end < args.start:
-                    raise ValueError("End year of news data range must not be earlier than start year.")
+    # Data preparation stage
+    elif args.stage == 'data':
+        # Error checking
+        if args.data is None:
+            raise ValueError("No data source specified.")
 
-            elif args.data == 'composite':
-                if len(args.include) < 2:
-                    raise ValueError(f"If specifying a composite dataset, at least two data sources must be specified (to merge together). You only specified {len(args.datasets)}.")
+        if args.data == 'news-articles':
+            if args.end < args.start:
+                raise ValueError("End year of news data range must not be earlier than start year.")
 
-            # run data preparation pipeline
-            if args.data == 'news-articles':
-                e2e_data(
-                    data_type=args.data,
-                    start_year=args.start,
-                    end_year=args.end,
-                    summaries=args.sum,
-                    tt_split=args.split
-                )
+        elif args.data == 'composite':
+            if len(args.include) < 2:
+                raise ValueError(f"If specifying a composite dataset, at least two data sources must be specified (to merge together). You only specified {len(args.datasets)}.")
 
-            elif args.data == 'composite':
-                e2e_data(
-                    data_type=args.data,
-                    tt_split=args.split,
-                    composite_datasets_list=args.include,
-                    dataset_balance=args.databalance
-                )
-
-            else:
-                e2e_data(
-                    data_type=args.data,
-                    tt_split=args.split
-                )
-
-        elif args.stage in ['train', 'test']:
-            # run data preparation pipeline if dataset does not exist
-            if args.data[:7] == 'news-20':  # articles between two dates
-                data_type, data_start, data_end = args.data.split('-')
-                summaries = False
-            elif args.data[:8] == 'news-sum':  # summaries
-                data_type, summaries, data_start, data_end = 'news-articles', True, '', ''
-            else:  # transcripts, composite, etc.
-                data_type, summaries, data_start, data_end = args.data, False, '', ''
-
-            dataset_exists = check_data_exists(
-                data_type=data_type,
-                train_or_test=args.stage,
-                start_date=data_start,
-                end_date=data_end,
-                summaries=summaries,
+        # Pass the appropriate arguments to the data preparation pipeline
+        if args.data == 'news-articles':
+            e2e_data(
+                data_type=args.data,
+                tt_split=args.train_split,
+                start_year=args.start,
+                end_year=args.end,
+                summaries=args.summaries,
+                dataset_stats=args.print_stats
             )
 
-            if not dataset_exists:
-                e2e_data(
-                    data_type=data_type,
-                    start_year=data_start,
-                    end_year=data_end,
-                    summaries=summaries,
-                    composite_datasets_list=['news-articles', 'news-transcripts'],
-                )
+        elif args.data == 'composite':
+            e2e_data(
+                data_type=args.data,
+                tt_split=args.train_split,
+                composite_datasets_list=args.include,
+                dataset_balance=args.databalance,
+                dataset_stats=args.print_stats
+            )
 
-            if args.stage == 'train':
-                # run pipeline to build and train language model
-                e2e_train(
-                    data_source=args.data,
-                    use_cuda=args.cuda,
-                    validation=args.val,
-                    dataset_stats=args.stats,
-                    training_plot=args.plot,
-                    epochs=args.epochs,
-                )
-            else:  # args.stage == 'test'
-                # run model testing pipeline
-                e2e_test(
-                    args.models,
-                    data_source=args.data,
-                    use_cuda=args.cuda,
-                    print_stats=args.stats,
-                    output_file=args.output
-                )
+        else:
+            e2e_data(
+                data_type=args.data,
+                tt_split=args.train_split,
+                dataset_stats=args.print_stats
+            )
+
+    # Training and testing stages (both use same initial data checks)
+    elif args.stage in ['train', 'test']:
+        # Run data preparation pipeline if dataset does not yet exist
+        data_source = args.data
+        if args.data.startswith('news-20'):  # articles between two dates
+            data_type, data_start, data_end = args.data.split('-')
+            summaries = False
+        elif args.data.startswith('news-sum'):  # summaries
+            data_type, summaries, data_start, data_end = 'news-articles', True, '', ''
+        else:  # transcripts, composite, etc.
+            data_type, summaries, data_start, data_end = args.data, False, '', ''
+
+        dataset_exists = check_data_exists(
+            data_source=data_source,
+            train_or_test=args.stage
+        )
+
+        if not dataset_exists:
+            e2e_data(
+                data_type=data_type,
+                start_year=data_start,
+                end_year=data_end,
+                summaries=summaries,
+                composite_datasets_list=['news-articles', 'news-transcripts']
+            )
+
+        # Training stage
+        if args.stage == 'train':
+            e2e_train(
+                data_source=args.data,
+                epochs=args.epochs,
+                use_cuda=args.gpu,
+                validation=args.val,
+                training_plot=args.plot
+            )
+
+        # Testing stage
+        else:
+            e2e_test(
+                args.models,
+                data_source=args.data,
+                use_cuda=args.gpu,
+                output_file=args.output
+            )
