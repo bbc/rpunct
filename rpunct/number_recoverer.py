@@ -28,10 +28,11 @@ class NumberRecoverer:
     to convert numbers written in the natural language to their equivalent numeric forms.
     """
 
-    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True):
+    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True, restore_decimals=True):
         self.correct_currencies = correct_currencies
         self.correct_bbc_style_numbers = correct_bbc_style_numbers
         self.comma_separators = comma_separators
+        self.restore_decimals = restore_decimals
 
     def process(self, text):
         """
@@ -50,7 +51,8 @@ class NumberRecoverer:
 
         # Restore decimal points
         parsed_list = parsed_text.split(" ")
-        parsed_list = self.replace_decimal_points(parsed_list)
+        if self.restore_decimals:
+            parsed_list = self.replace_decimal_points(parsed_list)
 
         # Correct currencies, BBC styling of numbers, and insert currency separators into numbers >= 10,000
         output_text = ""

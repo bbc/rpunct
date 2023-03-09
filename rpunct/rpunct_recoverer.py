@@ -21,7 +21,7 @@ class RPunctRecoverer:
     """
     A class for loading the RPunct object and exposing it to linguine code.
     """
-    def __init__(self, model_source, use_cuda):
+    def __init__(self, model_source, use_cuda=True):
             self.recoverer = RestorePuncts(
                 model_source=model_source,
                 use_cuda=(use_cuda and torch.cuda.is_available())
@@ -61,7 +61,7 @@ class RPunctRecoverer:
 
     def recover(self, transcript):
         # Process entire transcript, then retroactively apply punctuation to words in segments
-        recovered = self.recoverer.punctuate(transcript, lang='en')
+        recovered = self.recoverer.punctuate(transcript)
 
         # Revert numbers to digit notation
         recovered = self.number_recoverer.process(recovered)
@@ -87,6 +87,8 @@ class RPunctRecoverer:
             plaintext = self.strip_punctuation(input_text)
         else:
             plaintext = input_text
+
+        print(plaintext)
 
         # Restore punctuation to plaintext using RPunct
         punctuated = self.recover(plaintext)
@@ -121,16 +123,20 @@ class RPunctRecoverer:
         # print(f"\t * Currency symbols added = keywords removed = {punctuated.count('£') + punctuated.count('$') + punctuated.count('€')}")
         # print(f"\t * Deminals added = point words removed = {plaintext.count(' point ')}")
 
+        return punctuated
+
 
 def rpunct_main(model_location, input_txt, output_txt=None, use_cuda=False):
     # Generate an RPunct model instance
     punct_model = RPunctRecoverer(model_source=model_location, use_cuda=use_cuda)
 
     # Run e2e inference pipeline
-    punct_model.run(input_txt, output_txt)
+    output = punct_model.run(input_txt, output_txt)
+
+    return output
 
 
 if __name__ == "__main__":
-    model_default = 'outputs/clean-composite-1e'
-    input_default = 'tests/inferences/full-ep/truth.txt'
+    model_default = 'outputs/best_model'
+    input_default = 'tests/inferences/full-ep/test.txt'
     rpunct_main(model_default, input_default)
