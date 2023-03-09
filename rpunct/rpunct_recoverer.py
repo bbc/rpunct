@@ -88,8 +88,6 @@ class RPunctRecoverer:
         else:
             plaintext = input_text
 
-        print(plaintext)
-
         # Restore punctuation to plaintext using RPunct
         punctuated = self.recover(plaintext)
 
