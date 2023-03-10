@@ -60,11 +60,15 @@ class RPunctRecoverer:
         return plaintext
 
     def recover(self, transcript):
-        # Process entire transcript, then retroactively apply punctuation to words in segments
-        recovered = self.recoverer.punctuate(transcript)
-
         # Revert numbers to digit notation
-        recovered = self.number_recoverer.process(recovered)
+        recovered = self.number_recoverer.process(transcript)
+
+        # print('\nNumber recovered:\n', recovered)
+
+        # Process entire transcript, then retroactively apply punctuation to words in segments
+        recovered = self.recoverer.punctuate(recovered)
+
+        # print('\nPunctuation recovered:\n', recovered)
 
         return recovered
 
@@ -87,6 +91,8 @@ class RPunctRecoverer:
             plaintext = self.strip_punctuation(input_text)
         else:
             plaintext = input_text
+
+        # print('\nPlaintext:\n', plaintext)
 
         # Restore punctuation to plaintext using RPunct
         punctuated = self.recover(plaintext)

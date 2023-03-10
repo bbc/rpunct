@@ -14,8 +14,11 @@ except ModuleNotFoundError:
     from punctuate import TERMINALS
 
 
-STRING_NUMBERS = ['million', 'billion', 'trillion']
-currencies = {
+STRING_NUMBERS = [
+    'million', 'billion', 'trillion'
+]
+
+CURRENCIES = {
     'pound': '£',
     'euro': '€',
     'dollar': '$'
@@ -28,11 +31,12 @@ class NumberRecoverer:
     to convert numbers written in the natural language to their equivalent numeric forms.
     """
 
-    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True, restore_decimals=True):
+    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True, restore_decimals=True, restore_percentages=True):
         self.correct_currencies = correct_currencies
         self.correct_bbc_style_numbers = correct_bbc_style_numbers
         self.comma_separators = comma_separators
         self.restore_decimals = restore_decimals
+        self.restore_percentages = restore_percentages
 
     def process(self, text):
         """
@@ -42,12 +46,8 @@ class NumberRecoverer:
         parsed_text = self.number_parser(text)
 
         # Convert percentages to use the symbol notation
-        parsed_text = parsed_text.replace(" percent", "%")
-
-        # If we are correcting currencies, we don't want these words to be hidden mid-hyphenation
-        if self.correct_currencies:
-            for word in currencies.keys():
-                parsed_text = parsed_text.replace(f"-{word}", f" {word}")
+        if self.restore_percentages:
+            parsed_text = self.insert_percentage_symbols(parsed_text)
 
         # Restore decimal points
         parsed_list = parsed_text.split(" ")
@@ -59,20 +59,21 @@ class NumberRecoverer:
         for word in parsed_list:
             stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower()
 
-            # Restore currency words to their symbols
-            if self.correct_currencies and self.is_currency(stripped_word):
-                    output_text = self.insert_currency_symbols(output_text, word)
+            if stripped_word:
+                # Restore currency words to their symbols
+                if self.correct_currencies and self.is_currency(stripped_word):
+                        output_text = self.insert_currency_symbols(output_text, word)
 
-            # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
-            elif self.correct_bbc_style_numbers and self.is_stylable_number(word):
-                    output_text = self.bbc_style_numbers(output_text, word)
+                # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
+                elif self.correct_bbc_style_numbers and self.is_stylable_number(word):
+                        output_text = self.bbc_style_numbers(output_text, word)
 
-            # Format numbers with many digits to include comma separators
-            elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
-                output_text += self.insert_comma_seperators(word) + " "
+                # Format numbers with many digits to include comma separators
+                elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
+                    output_text += self.insert_comma_seperators(word)
 
-            else:
-                output_text += word + " "
+                else:
+                    output_text += word + " "
 
         # Remove any unwanted whitespace
         output_text = output_text.strip()
@@ -112,7 +113,7 @@ class NumberRecoverer:
 
     def is_currency(self, word):
         """Checks if a word is a currency term."""
-        return (word in currencies.keys()) or (word[-1] == 's' and word[:-1] in currencies.keys())
+        return (word in CURRENCIES.keys()) or (word[-1] == 's' and word[:-1] in CURRENCIES.keys())
 
     def is_stylable_number(self, number):
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
@@ -177,7 +178,7 @@ class NumberRecoverer:
             # When a numeric word is found, reconstruct the output text around this (i.e. previous_text + currency_symbol + number + trailing_text)
             if prev_word_stripped.isnumeric():
                 new_output_text = text_list[:-lookback]  # previous text before currency symbol
-                new_output_text.append(currencies.get(stripped_currency) + prev_word)  # currency symbol and number
+                new_output_text.append(CURRENCIES.get(stripped_currency) + prev_word)  # currency symbol and number
                 new_output_text.extend(text_list[-lookback + 1:])  # trailing text after currency symbol/number
                 text = " ".join(new_output_text)
 
@@ -193,6 +194,14 @@ class NumberRecoverer:
         # Keep the currency keyword as text if no numeric words found in lookback window
         if not found:
             text += currency + " "
+
+        return text
+
+    def insert_percentage_symbols(self, text):
+        """
+        Converts the natural language term 'percent' in text to the symbol '%' if following a digit.
+        """
+        text = re.sub(r'([0-9]*) percent', r'\1%', text)
 
         return text
 
@@ -245,6 +254,6 @@ class NumberRecoverer:
             number = number[:i] + "," + number[i:]
 
         # Reconcatenate leading/trailing chars/digits
-        number = start_char + number + end_chars
+        number = start_char + number + end_chars + " "
 
         return number
