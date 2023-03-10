@@ -12,6 +12,7 @@ PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
 CAPI_LABELS = ['O', 'C', 'U', 'M']
 VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 TERMINALS = ['.', '!', '?']
+# VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
 
 
 class RestorePuncts:
