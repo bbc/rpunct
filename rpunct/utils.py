@@ -4,31 +4,24 @@
 __author__ = "Daulet N."
 __email__ = "daulet.nurmanbetov@gmail.com"
 
-def prepare_unpunct_text(text):
-    """
-    Given a text, normalizes it to subsequently restore punctuation
-    """
-    formatted_txt = text.replace('\n', '').strip()
-    formatted_txt = formatted_txt.lower()
-    formatted_txt_lst = formatted_txt.split(" ")
-    punct_strp_txt = [strip_punct(i) for i in formatted_txt_lst]
-    normalized_txt = " ".join([i for i in punct_strp_txt if i])
-    return normalized_txt
 
-def strip_punct(wrd):
+class Item(object):
     """
-    Given a word, strips non aphanumeric characters that precede and follow it
+    Class representing an item in a transcript.
+
     """
-    if not wrd:
-        return wrd
-    
-    while not wrd[-1:].isalnum():
-        if not wrd:
-            break
-        wrd = wrd[:-1]
-    
-    while not wrd[:1].isalnum():
-        if not wrd:
-            break
-        wrd = wrd[1:]
-    return wrd
+
+    def __init__(self, start_time, end_time, content):
+        """
+        Constructor.
+
+        Args:
+            start_time: The start time of the item in seconds (string) e.g. "75.24"
+            end_time: The end time of the item in seconds (string)
+            content: The content of the item (string)
+
+        """
+
+        self.start_time = float(start_time)
+        self.end_time = float(end_time)
+        self.content = content
