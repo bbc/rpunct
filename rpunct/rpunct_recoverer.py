@@ -25,9 +25,9 @@ class RPunctRecoverer:
     """
     A class for loading the RPunct object and exposing it to linguine code.
     """
-    def __init__(self, model_source, use_cuda=True):
+    def __init__(self, model_location, use_cuda=True):
             self.recoverer = RestorePuncts(
-                model_source=model_source,
+                model_source=model_location,
                 use_cuda=(use_cuda and torch.cuda.is_available())
             )
             self.number_recoverer = NumberRecoverer()
@@ -227,7 +227,7 @@ class RPunctRecoverer:
         plaintext = self.strip_punctuation(input_text)  # Convert input transcript to plaintext (no punctuation)
         punctuated = self.process_strings(plaintext)  # Restore punctuation to plaintext using RPunct
 
-        self.output_to_file(self, punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
+        self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
 
         if compute_wer:
             self.word_error_rate(input_text, plaintext, punctuated)
@@ -237,7 +237,7 @@ class RPunctRecoverer:
 
 def rpunct_main(model_location, input_txt, output_txt=None, use_cuda=False):
     # Generate an RPunct model instance
-    punct_model = RPunctRecoverer(model_source=model_location, use_cuda=use_cuda)
+    punct_model = RPunctRecoverer(model_location=model_location, use_cuda=use_cuda)
 
     # Run e2e inference pipeline
     output = punct_model.run(input_txt, output_txt)
