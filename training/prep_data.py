@@ -192,7 +192,7 @@ def create_record(text, mixed_casing=False):
     # Remove punctuation of each word, and label it with a tag representing what punctuation it did have
     for obs in observation:
         # Convert word to plaintext
-        stripped_obs = re.sub(r"[^0-9a-zA-Z']", "", obs)
+        stripped_obs = re.sub(r"[^0-9a-zA-Z]", "", obs)
 
         if stripped_obs.endswith("'"):  # Remove any remaining trailing apostrophes (only leave mid-word apostrophes)
             stripped_obs = stripped_obs[:-1]
@@ -224,11 +224,12 @@ def create_record(text, mixed_casing=False):
                 if not stripped_obs[-1].isalnum():
                     stripped_obs = stripped_obs[:-1]
 
-                if stripped_obs[-2:] != "'s" and stripped_obs[-1:] != 's' and stripped_obs.lower() not in mixed_case.keys():
+                if stripped_obs[-1:] != 's' and stripped_obs.lower() not in mixed_case.keys():
                     mixed_case.update({stripped_obs.lower(): stripped_obs})
 
         # Add the word and its label to the dataset
-        new_obs.append({'sentence_id': 0, 'words': stripped_obs.lower(), 'labels': new_lab})
+        # N.B. apostrophes (') and percentages (%) are preserved in the dataset
+        new_obs.append({'sentence_id': 0, 'words': re.sub(r"[^0-9a-zA-Z'%]", "", obs).lower(), 'labels': new_lab})
 
     return new_obs, mixed_case
 
