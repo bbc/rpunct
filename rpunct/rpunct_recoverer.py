@@ -28,6 +28,42 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
+    def run(self, input_path, output_file_path=None, compute_wer=False):
+        # Read input text
+        print(f"\nReading input text from file: {input_path}")
+        with open(input_path, 'r') as fp:
+            input_text = fp.read()
+
+        # Convert input transcript to plaintext (no punctuation)
+        plaintext = self.strip_punctuation(input_text)
+
+        # print('\nPlaintext:\n', plaintext)
+
+        # Restore punctuation to plaintext using RPunct
+        punctuated = self.recover(plaintext)
+
+        # Output restored text (to a specified TXT file or the command line)
+        self.output_to_file(self, punctuated, output_file_path)
+
+        # Compute WER metric
+        if compute_wer:
+            self.word_error_rate(input_text, plaintext, punctuated)
+
+        return punctuated
+
+    def recover(self, transcript):
+        # Revert numbers to digit notation
+        recovered = self.number_recoverer.process(transcript)
+
+        # print('\nNumber recovered:\n', recovered)
+
+        # Process entire transcript, then retroactively apply punctuation to words in segments
+        recovered = self.recoverer.punctuate(recovered)
+
+        # print('\nPunctuation recovered:\n', recovered)
+
+        return recovered
+
     def strip_punctuation(self, truth_text):
         """
         Converts a string of truth text to plaintext of the same format as STT transcripts.
@@ -59,18 +95,23 @@ class RPunctRecoverer:
 
         return plaintext
 
-    def recover(self, transcript):
-        # Revert numbers to digit notation
-        recovered = self.number_recoverer.process(transcript)
+    def output_to_file(self, data, file_path=None):
+        if not file_path:
+            # Output to command line
+            print("\nPrinting punctuated text:", end='\n\n')
+            print(data, end='\n\n')
+        else:
+            # Check if output directory exists
+            output_dir, _ = os.path.split(file_path)
+            output_path_exists = os.path.isdir(output_dir)
 
-        # print('\nNumber recovered:\n', recovered)
-
-        # Process entire transcript, then retroactively apply punctuation to words in segments
-        recovered = self.recoverer.punctuate(recovered)
-
-        # print('\nPunctuation recovered:\n', recovered)
-
-        return recovered
+            # Output to file if the directory exists
+            if output_path_exists:
+                print(f"Writing punctuated text to file: {file_path}")
+                with open(file_path, 'w') as fp:
+                    fp.write(data)
+            else:
+                raise FileNotFoundError(f"Directory specified to ouptut text file to does not exist: {output_dir}")
 
     def word_error_rate(self, truth, stripped, predicted):
         # Uses `jiwer` to compute word error rates between punctuated and unpunctuated text
@@ -79,55 +120,6 @@ class RPunctRecoverer:
         print("Word error rate:")
         print(f"\tNo recovery     : {wer_plaintext:.2f}%")
         print(f"\tRPunct recovery : {word_error_rate:.2f}%", end='\n\n')
-
-    def run(self, input_path, output_file_path=None, clean_up_input=True, compute_wer=False):
-        # Read input text
-        print(f"\nReading input text from file: {input_path}")
-        with open(input_path, 'r') as fp:
-            input_text = fp.read()
-
-        # Convert input transcript to plaintext (no punctuation)
-        if clean_up_input:
-            plaintext = self.strip_punctuation(input_text)
-        else:
-            plaintext = input_text
-
-        # print('\nPlaintext:\n', plaintext)
-
-        # Restore punctuation to plaintext using RPunct
-        punctuated = self.recover(plaintext)
-
-        # Output restored text (to a specified TXT file or the command line)
-        if not output_file_path:
-            # Output to command line
-            print("\nPrinting punctuated text:", end='\n\n')
-            print(punctuated, end='\n\n')
-        else:
-            # Check if output directory exists
-            output_dir, _ = os.path.split(output_file_path)
-            output_path_exists = os.path.isdir(output_dir)
-
-            # Output to file if the directory exists
-            if output_path_exists:
-                print(f"Writing punctuated text to file: {output_file_path}")
-                with open(output_file_path, 'w') as fp:
-                    fp.write(punctuated)
-            else:
-                raise FileNotFoundError(f"Directory specified to ouptut text file to does not exist: {output_dir}")
-
-        # Compute WER metric
-        if compute_wer:
-            self.word_error_rate(input_text, plaintext, punctuated)
-
-        # # USING THIS TO FIND ERROR IN LENGTH DIFFERENCES
-        # # Comparing transcript lengths
-        # print(f"> Original transcript length = {len(plaintext.split(' '))}")
-        # print(f"> Restored transcript length = {len(punctuated.split(' '))}")
-        # print(f"\t * Hyphens added = words concatenated = {punctuated.count('-')}")
-        # print(f"\t * Currency symbols added = keywords removed = {punctuated.count('£') + punctuated.count('$') + punctuated.count('€')}")
-        # print(f"\t * Deminals added = point words removed = {plaintext.count(' point ')}")
-
-        return punctuated
 
 
 def rpunct_main(model_location, input_txt, output_txt=None, use_cuda=False):
