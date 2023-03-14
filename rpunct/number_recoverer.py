@@ -22,6 +22,19 @@ CURRENCIES = {
     'dollar': '$'
 }
 
+DECADES = {
+    'hundreds': '00s',
+    'tens': '10s',
+    'twenties': '20s',
+    'thirties': '30s',
+    'fourties': '40s',
+    'fifties': '50s',
+    'sixties': '60s',
+    'seventies': '70s',
+    'eighties': '80s',
+    'nineties': '90s'
+}
+
 
 class NumberRecoverer:
     """
@@ -54,7 +67,8 @@ class NumberRecoverer:
 
         # Correct currencies, BBC styling of numbers, and insert currency separators into numbers >= 10,000
         output_text = ""
-        for word in parsed_list:
+        for i in range(len(parsed_list)):
+            word = parsed_list[i]
             stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower()
 
             if stripped_word:
@@ -69,6 +83,10 @@ class NumberRecoverer:
                 # Format numbers with many digits to include comma separators
                 elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
                     output_text += self.insert_comma_seperators(word)
+
+                # Replace colloquial decades terms with digits
+                elif self.is_date_decade(stripped_word) and parsed_list[i - 1].isnumeric():
+                    output_text = self.decades_to_digits(output_text, stripped_word)
 
                 else:
                     output_text += word + " "
@@ -119,6 +137,10 @@ class NumberRecoverer:
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
         # (Includes failsafe if number is immediately followed by a punctuation character)
         return (number.isnumeric() and int(number) < 10) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10)
+
+    def is_date_decade(self, word):
+        """Checks if a word is a natural language date term specifying a decade (e.g. nineties)"""
+        return word in DECADES.keys()
 
     @staticmethod
     def replace_decimal_points(text_list):
@@ -267,3 +289,12 @@ class NumberRecoverer:
         number = start_char + number + end_chars + " "
 
         return number
+
+    def decades_to_digits(self, text, decade):
+        if text.endswith(" "):
+            text = text[:-1]
+
+        output_text_list = text.split(" ")
+        output = " ".join(output_text_list[:-1]) + " " + output_text_list[-1][:2] + DECADES[decade] + " "
+
+        return output
