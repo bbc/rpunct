@@ -10,3 +10,4 @@ seaborn>=0.12.0
 jiwer
 num2words
 number_parser
+kaldialign==0.2

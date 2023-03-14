@@ -10,9 +10,11 @@ from number_parser import parse as number_parser
 
 TERMINALS = ['.', '!', '?']
 
-STRING_NUMBERS = [
-    'million', 'billion', 'trillion'
-]
+STRING_NUMBERS = {
+    'million': 'm',
+    'billion': 'bn',
+    'trillion': 'tn'
+}
 
 CURRENCIES = {
     'pound': '£',
@@ -76,6 +78,8 @@ class NumberRecoverer:
         output_text = output_text.replace(" - ", "-")
         output_text = output_text.replace("- ", "-")
 
+        text = re.sub(r'([0-9]*)-([0-9]*)', r'\1\2', text)  # remove unwanted segmenting of numbers
+
         return output_text
 
     def number_parser(self, text):
@@ -87,7 +91,7 @@ class NumberRecoverer:
         # also ensure large number definitions remain as words in text
         if self.bbc_style_numbers:
             # Swap digits that we don't want to be parsed with control characters (from STRING_NUMBERS lookup table)
-            control_chars = list(enumerate(STRING_NUMBERS))
+            control_chars = list(enumerate(STRING_NUMBERS.keys()))
             for index, number in control_chars:
                 text = text.replace(number, f"\\{index}")
 
@@ -167,15 +171,19 @@ class NumberRecoverer:
 
         # Scan through lookback window to find the number to which the currency symbol punctuates
         text_list = text.split(" ")
+        quantifying_tag = ""
+
         while lookback < 5:
             prev_word = text_list[-lookback]
             prev_word_stripped = re.sub(r"[^0-9a-zA-Z]", "", prev_word)
 
             # When a numeric word is found, reconstruct the output text around this (i.e. previous_text + currency_symbol + number + trailing_text)
             if prev_word_stripped.isnumeric():
-                new_output_text = text_list[:-lookback]  # previous text before currency symbol
-                new_output_text.append(CURRENCIES.get(stripped_currency) + prev_word)  # currency symbol and number
-                new_output_text.extend(text_list[-lookback + 1:])  # trailing text after currency symbol/number
+                new_output_text = text_list[:-lookback]  # previous text before currency number
+
+                new_output_text.append(CURRENCIES.get(stripped_currency) + prev_word +  quantifying_tag)  # currency symbol and number (including any large denominators - e.g. million -> m)
+
+                new_output_text.extend([word for word in text_list[-lookback + 1:] if word not in STRING_NUMBERS.keys()])  # trailing text after currency symbol/number
                 text = " ".join(new_output_text)
 
                 # Add back in any punctuation trailing the original currency keyword
@@ -184,6 +192,12 @@ class NumberRecoverer:
 
                 found = True
                 break
+
+            # convert big number words (e.g. million) to condensed versions (e.g. mn)
+            elif prev_word_stripped in STRING_NUMBERS.keys():
+                quantifying_tag = STRING_NUMBERS[prev_word_stripped] + quantifying_tag
+                lookback += 1
+
             else:
                 lookback += 1
 

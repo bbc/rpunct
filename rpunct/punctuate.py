@@ -4,6 +4,7 @@
 __author__ = "Daulet N."
 __email__ = "daulet.nurmanbetov@gmail.com"
 
+import re
 import os
 import json
 from simpletransformers.ner import NERModel

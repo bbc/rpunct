@@ -225,7 +225,7 @@ class RPunctRecoverer:
             input_text = fp.read()
 
         plaintext = self.strip_punctuation(input_text)  # Convert input transcript to plaintext (no punctuation)
-        punctuated = self.process_strings(plaintext)  # Restore punctuation to plaintext using RPunct
+        punctuated = self.process_strings(plaintext, num_rec=True)  # Restore punctuation to plaintext using RPunct
 
         self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
 
