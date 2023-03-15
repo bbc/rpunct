@@ -198,6 +198,8 @@ class RestorePuncts:
         punct_resp = punct_resp.replace("- ", "-")
         punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
 
+        punct_resp = re.sub(r"([0-9]+)-([0-9]+)", r'\1\2', punct_resp)  # remove unwanted segmenting of numbers
+
         # Ensure text ends with a terminal
         if punct_resp[-1].isalnum():
             punct_resp += "."

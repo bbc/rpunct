@@ -179,7 +179,8 @@ class NumberRecoverer:
 
         return corrected_list
 
-    def insert_currency_symbols(self, text, currency):
+    @staticmethod
+    def insert_currency_symbols(text, currency):
         """
         Converts currency terms in text to symbols before their respective numerical values.
         """
@@ -229,7 +230,8 @@ class NumberRecoverer:
 
         return text
 
-    def insert_percentage_symbols(self, text):
+    @staticmethod
+    def insert_percentage_symbols(text):
         """
         Converts the natural language term 'percent' in text to the symbol '%' if following a digit.
         """
@@ -237,7 +239,8 @@ class NumberRecoverer:
 
         return text
 
-    def bbc_style_numbers(self, text, number):
+    @staticmethod
+    def bbc_style_numbers(text, number):
         """
         Converts small numbers back from digits to words (according to BBC Style Guide rules).
         """
@@ -264,7 +267,8 @@ class NumberRecoverer:
 
         return text
 
-    def insert_comma_seperators(self, number):
+    @staticmethod
+    def insert_comma_seperators(number):
         """
         Inserts comma separators into numbers with many digits to break up 1000s (e.g. '100000' -> '100,000').
         """
@@ -290,7 +294,8 @@ class NumberRecoverer:
 
         return number
 
-    def decades_to_digits(self, text, decade):
+    @staticmethod
+    def decades_to_digits(text, decade):
         if text.endswith(" "):
             text = text[:-1]
 
