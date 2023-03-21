@@ -7,6 +7,7 @@ __email__ = "daulet.nurmanbetov@gmail.com"
 import re
 import os
 import json
+from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
 PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
@@ -51,17 +52,24 @@ class RestorePuncts:
         """
         # Restoration pipeline
         segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
-        preds_lst = [self.predict(i['text']) for i in segments]  # Generate word-level punctuation predictions
+        preds_lst = self.predict(segments, silent=False)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
         punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def predict(self, input_slice:str):
+    def predict(self, input_segments:str, silent:bool=True):
         """
         Passes the unpunctuated text to the model for punctuation.
         """
-        predictions = self.model.predict([input_slice])[0][0]
+        if silent:
+            predictions = [self.model.predict([i['text']])[0][0] for i in input_segments]
+        else:
+            predictions = []
+            with tqdm(input_segments) as I:
+                I.set_description("Punctuating text segments")
+                for i in I:
+                    predictions.append(self.model.predict([i['text']])[0][0])
 
         return predictions
 

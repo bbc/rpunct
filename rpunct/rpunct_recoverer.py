@@ -9,6 +9,7 @@ import tqdm
 import torch
 import string
 import decimal
+import jiwer
 from jiwer import wer
 from num2words import num2words
 
@@ -21,6 +22,7 @@ except ModuleNotFoundError:
     from number_recoverer import NumberRecoverer
     from utils import Item
 
+
 class RPunctRecoverer:
     """
     A class for loading the RPunct object and exposing it to linguine code.
@@ -32,14 +34,14 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
-    def process(self, input_transcript, input_type='segmented', conduct_number_recovery=False):
+    def process(self, input_transcript, input_type='items', conduct_number_recovery=False):
         """
         Format input transcripts depending on their structure (segmented or pure plaintext)
         and pass them to RPunct to have punctuation/capitalisation/numbers recovered
         Then reconstructs the punctuated output in the same format as the input.
 
         Args:
-            input_transcript: a list of lists containing Item objects (of STT plaintext) or a single string of plaintext.
+            input_transcript: a list of Item objects (of STT plaintext) or a single string of plaintext.
             input_type: specify which one of these above inputs is the case (segmented Items or a text string)
             conduct_number_recovery: toggle the number recoverer.
 
@@ -47,30 +49,34 @@ class RPunctRecoverer:
             a list of of lists containing Item objects (where each Item.content is the recovered text)
             or a string of punctated text (depends on input type).
         """
-        if input_type == 'str' and type(input_transcript) == str:
+        if input_type.startswith('str') and type(input_transcript) == str:
             output = self.process_strings(input_transcript, conduct_number_recovery)
 
-        elif input_type.startswith('seg') and type(input_transcript) == list:
-            output = self.process_segments(input_transcript, conduct_number_recovery)
+        elif input_type.startswith('item') and type(input_transcript) == list:
+            output = self.process_items(input_transcript, conduct_number_recovery)
 
         else:
-            raise TypeError("Input transcript to recoverer does not match the specified input type ('str' or 'segments')")
+            raise TypeError("Input transcript to recoverer does not match the specified input type ('str' or 'items')")
 
         return output
 
     def process_strings(self, transcript, num_rec=False):
+        # print('\nPlaintext: \n', transcript)
+
         # Conduct number recovery process on segment transcript via NumberRecoverer
         if num_rec:
             recovered = self.number_recoverer.process(transcript)
+            # print('\nNumber recovered: \n', transcript)
         else:
             recovered = transcript
 
         # Process entire transcript, then retroactively apply punctuation to words in segments
         recovered = self.recoverer.punctuate(recovered)
+        # print('\nPunctuation recovered: \n', transcript)
 
         return recovered
 
-    def process_segments(self, input_segments, num_rec=False):
+    def process_items(self, input_segments, num_rec=False):
         # Extracts list of words from flattened list, converts to a single sting per speaker segment
         transcript_segments = [[re.sub(r"[^0-9a-zA-Z']", "", item.content).lower() for item in sublist] for sublist in input_segments]
         recovered_segment_words = []
@@ -101,10 +107,15 @@ class RPunctRecoverer:
         """
         # set lowercase and replace certain characters
         text = truth_text.lower()
+
+        text = text.replace("[music]", "").replace("[music playing]", "").replace("(crowd cheering)", "").replace("(crowd shouting)", "").replace("(gentle music)", "").replace("(dramatic music)", "").replace("[clock ticking]", "")
+
         text = text.replace("\n", " ")
         text = text.replace(" - ", " ")
-        text = text.replace("' ", " ")
+        text = text.replace("-", " ")
         text = text.replace("%", " percent")
+        text = re.sub(r"[^0-9a-zA-Z' ]", "", text)
+        text = text.strip()
 
         # convert to list
         text = text.split(" ")
@@ -117,12 +128,10 @@ class RPunctRecoverer:
             except decimal.InvalidOperation:
                 pass
 
+            word = re.sub(r"[^0-9a-zA-Z' ]", "", word.replace("-", " "))
             plaintext.append(word)
 
         plaintext = " ".join(plaintext)
-
-        plaintext = plaintext.replace("-", "- ")
-        plaintext = re.sub(r"[^0-9a-zA-Z' ]", "", plaintext)
 
         return plaintext
 
@@ -225,6 +234,7 @@ class RPunctRecoverer:
             input_text = fp.read()
 
         plaintext = self.strip_punctuation(input_text)  # Convert input transcript to plaintext (no punctuation)
+
         punctuated = self.process_strings(plaintext, num_rec=True)  # Restore punctuation to plaintext using RPunct
 
         self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
@@ -235,12 +245,12 @@ class RPunctRecoverer:
         return punctuated
 
 
-def rpunct_main(model_location, input_txt, output_txt=None, use_cuda=False):
+def rpunct_main(model_location, input_txt, output_txt=None, use_cuda=False, wer=False):
     # Generate an RPunct model instance
     punct_model = RPunctRecoverer(model_location=model_location, use_cuda=use_cuda)
 
     # Run e2e inference pipeline
-    output = punct_model.run(input_txt, output_txt)
+    output = punct_model.run(input_txt, output_txt, compute_wer=wer)
 
     return output
 

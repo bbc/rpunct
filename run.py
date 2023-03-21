@@ -214,6 +214,14 @@ punct_parser.add_argument(
     help="Toggle between training on a GPU or on the CPU - default is CPU."
 )
 
+punct_parser.add_argument(
+    '-w',
+    '--wer',
+    action='store_true',
+    default=False,
+    help="Toggle on calculating the word error rate of the restored transcript compared to the input truth file (input file must be a correctly punctuated test file)."
+)
+
 
 # Logic to parse input arguments from command line and execute the RPunct stage (data/train/test/inference)
 if __name__ == "__main__":
@@ -229,7 +237,8 @@ if __name__ == "__main__":
             model_location=args.model,
             input_txt=args.input,
             output_txt=args.output,
-            use_cuda=args.gpu
+            use_cuda=args.gpu,
+            wer=args.wer
         )
 
     # Data preparation stage
