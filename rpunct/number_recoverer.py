@@ -9,6 +9,7 @@ from kaldialign import align
 from num2words import num2words
 from number_parser import parse as number_parser, parse_number as individual_number_parser
 
+
 TERMINALS = ['.', '!', '?']
 
 STRING_NUMBERS = {
@@ -59,7 +60,7 @@ class NumberRecoverer:
         self.restore_decimals = restore_decimals
         self.restore_percentages = restore_percentages
 
-    def process(self, input_text):
+    def process(self, input_text:str):
         """
         Pipeline for recovering formatting of numbers within a piece of text.
         """
@@ -141,26 +142,26 @@ class NumberRecoverer:
 
         return parsed
 
-    def is_currency(self, word):
+    @staticmethod
+    def is_currency(word):
         """Checks if a word is a currency term."""
         return (word in CURRENCIES.keys()) or (word[-1] == 's' and word[:-1] in CURRENCIES.keys())
 
-    def is_stylable_number(self, number):
+    @staticmethod
+    def is_stylable_number(number):
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
         # (Includes failsafe if number is immediately followed by a punctuation character)
         return (number.isnumeric() and int(number) < 10) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10)
 
-    def is_date_decade(self, word):
+    @staticmethod
+    def is_date_decade(word):
         """Checks if a word is a natural language date term specifying a decade (e.g. nineties)"""
         return word in DECADES.keys()
 
     @staticmethod
     def is_ordinal(text):
         """Checks if a natural language number is an ordinal"""
-        if text.capitalize() in ORDINALS:
-            return True
-        else:
-            return False
+        return text.capitalize() in ORDINALS
 
     @staticmethod
     def replace_decimal_points(text_list):
@@ -177,7 +178,7 @@ class NumberRecoverer:
             if re.sub(r"[^0-9a-zA-Z]", "", word) == "point" and i > 0 and i < len(text_list) - 1:
                 # When a case for decimal point formatting is identified, combine stripped full no. and decimal digits together around a `.` char
                 pre_word = text_list[i - 1]
-                pre_word_stripped = re.sub(",.?!%", "", pre_word)
+                pre_word_stripped = re.sub(r"[,.?!%]", "", pre_word)
                 post_word = text_list[i + 1]
                 post_word_stripped = re.sub(r"[^0-9a-zA-Z]", "", post_word)
 
@@ -255,7 +256,7 @@ class NumberRecoverer:
         """
         Converts the natural language term 'percent' in text to the symbol '%' if following a digit.
         """
-        text = re.sub(r'([0-9]*) percent', r'\1%', text)
+        text = re.sub(r'([0-9]+) percent', r'\1%', text)
 
         return text
 
@@ -350,8 +351,6 @@ class NumberRecoverer:
         EPS = '*'
         alignment = align(plain, stripped_recovered, EPS)
         mapping = []
-
-        print(alignment)
 
         for ref, hyp in alignment:
             if ref == EPS:

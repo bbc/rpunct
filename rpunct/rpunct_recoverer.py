@@ -3,14 +3,17 @@
 """
 Module supporting punctuation recovery and post-processing of raw STT output.
 """
-import os
 import re
-import tqdm
+import os
+import sys
+
 import torch
 import string
 import decimal
-import jiwer
+import traceback
+from tqdm import tqdm
 from jiwer import wer
+from kaldialign import align
 from num2words import num2words
 
 try:
@@ -34,7 +37,7 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
-    def process(self, input_transcript, input_type='items', conduct_number_recovery=False):
+    def process(self, input_transcript, input_type='items', conduct_number_recovery=True):
         """
         Format input transcripts depending on their structure (segmented or pure plaintext)
         and pass them to RPunct to have punctuation/capitalisation/numbers recovered
@@ -62,7 +65,6 @@ class RPunctRecoverer:
 
     def process_strings(self, transcript, num_rec=False):
         # print('\nPlaintext: \n', transcript)
-
         # Conduct number recovery process on segment transcript via NumberRecoverer
         if num_rec:
             recovered = self.number_recoverer.process(transcript)
@@ -86,11 +88,18 @@ class RPunctRecoverer:
             for segment in T:
                 # Conduct punctuation recovery process on segment transcript via RPunct
                 transcript = ' '.join(transcript_segments[segment]).strip(' ')
-                recovered = self.recoverer.punctuate(transcript, lang='en')
 
                 # Conduct number recovery process on segment transcript via NumberRecoverer
                 if num_rec:
-                    recovered = self.number_recoverer.process(recovered)
+                    recovered = self.number_recoverer.process(transcript)
+                else:
+                    recovered = transcript
+
+                # Conduct punctuation recovery process on segment transcript via RPunct
+                recovered = self.recoverer.punctuate(recovered)
+
+                # TEMPORARY FIX
+                recovered = recovered.replace("%%", "%")
 
                 # Format recovered transcript back into list of segments
                 recovered_words = recovered.split(' ')
@@ -162,18 +171,17 @@ class RPunctRecoverer:
         print(f"\tNo recovery     : {wer_plaintext:.2f}%")
         print(f"\tRPunct recovery : {word_error_rate:.2f}%", end='\n\n')
 
-    @staticmethod
-    def itemise_segments(all_original_segments, all_recovered_segments):
+    def itemise_segments(self, all_original_segments, all_recovered_segments):
         """
         Convert recovered words to segments of items (not just strings) including time code data
         Need to recompute timing information on a per-word level for each segment as some words may have been concatenated by hyphenation,
         changing their end time.
         """
 
-        for segment in range(len(all_original_segments)):
+        for index_segment in range(len(all_original_segments)):
             # Get original (plaintext) and punctuation-restored segments
-            original_segment = all_original_segments[segment]
-            recovered_segment = all_recovered_segments[segment]
+            original_segment = all_original_segments[index_segment]
+            recovered_segment = all_recovered_segments[index_segment]
 
             # Capitalise the first word of every segment
             recovered_segment[0] = recovered_segment[0].capitalize()
@@ -197,6 +205,15 @@ class RPunctRecoverer:
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
                     no_skip_words = rec_word.count('-')
 
+                    # If any part of hyphenation is numerical, include the skipped words that have been converted to digits
+                    if re.sub(r"[^0-9]", "", rec_word):
+                        split_word = rec_word.split('-')
+
+                        for sub_word_index in range(len(split_word)):
+                            if re.sub(r"[^0-9]", "", split_word[sub_word_index]):
+                                no_skip_words += self.calc_end_item_index(original_segment, index_orig, recovered_segment, index_rec, position=sub_word_index)
+                                # print(f" * [seg {index_segment} word {index_rec}] Original: {orig_item.content}...{original_segment[index_orig + no_skip_words].content}; Recovered: {rec_word}; Removed: {no_skip_words} / {total_fewer_words};")
+
                     # Find the final word of the hyphenation in the orginal segments list
                     end_item = original_segment[index_orig + no_skip_words]
 
@@ -207,9 +224,15 @@ class RPunctRecoverer:
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
 
-                elif rec_word.isnumeric() or re.sub(r"[^0-9a-zA-Z]", "", rec_word).isnumeric():  # number recovery case
-                    # Itemise with word & start/end times from associated original item
-                    new_item = Item(orig_item.start_time, orig_item.end_time, rec_word)
+                # number recovery case
+                elif re.sub(r"[^0-9]", "", rec_word):
+                    no_skip_words = self.calc_end_item_index(original_segment, index_orig, recovered_segment, index_rec)
+                    end_item = original_segment[index_orig + no_skip_words]
+
+                    new_item = Item(orig_item.start_time, end_item.end_time, rec_word)
+
+                    index_orig += no_skip_words
+                    total_fewer_words += no_skip_words
 
                 else:
                     # Itemise with word & start/end times from associated original item
@@ -220,12 +243,110 @@ class RPunctRecoverer:
                 index_orig += 1
 
             # Verify that the reconstructed segment is the same length as original (excluding words removed by hyphenation)
-            assert len(recovered_segment) == (len(original_segment) - total_fewer_words), "While reconstructing segment structure, a mistake has occured"
+            assert len(recovered_segment) == (len(original_segment) - total_fewer_words), \
+                f"While reconstructing segment structure, a mistake has occured. \
+                    \n Original text: {[item.content for item in original_segment]} \
+                    \n Recovered text: {[item.content for item in recovered_segment]}"
 
             # Return new itemised segment to the list of segments
-            all_recovered_segments[segment] = recovered_segment
+            all_recovered_segments[index_segment] = recovered_segment
 
         return all_recovered_segments
+
+    @staticmethod
+    def align_original_recovered(original_lst, recovered_lst):
+        stripped_recovered_lst = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered_lst]
+        stripped_recovered_lst = " ".join(stripped_recovered_lst).split(" ")
+
+        EPS = '*'
+        alignment = align(original_lst, recovered_lst, EPS)
+        mapping = []
+
+        for ref, hyp in alignment:
+            if ref == EPS:
+                # insertion (one-to-many)
+                raise ValueError("Insertion found and not handled.")
+            elif hyp == EPS:
+                # deletion (many-to-one)
+                mapping[-1][0].append(ref)  # append new word to multi-word element
+            else:
+                # single substitution (one-to-one mapping)
+                mapping.append([[ref], [hyp]])
+
+        return mapping
+
+
+    def calc_end_item_index(self, plaintext_items_lst, current_plaintext_index, recovered_words_lst, current_recovered_index, position=0):
+        # Generate clean list of original words
+        original_segment_words = [item.content.lower() for item in plaintext_items_lst[current_plaintext_index:]]
+
+        # If the recovered word has a percent sign the index of the word 'percent' in the original text gives number of removals
+        # Similar technique if a currency symbol is present
+        recovered_word = recovered_words_lst[current_recovered_index]
+        numerical_removals = 0
+
+        if recovered_word.endswith('%'):
+            if original_segment_words.count('percent') > 0:
+                try:
+                    numerical_removals = original_segment_words.index('percent')
+                except ValueError:
+                    raise ValueError(f"Can't find 'percent' in list. Recovered word: {recovered_word}, original segment: {original_segment_words}.")
+
+        elif recovered_word.startswith('£'):
+            if original_segment_words.count('pounds') > 0:
+                numerical_removals = original_segment_words.index('pounds')
+            elif original_segment_words.count('pound') > 0:
+                numerical_removals = original_segment_words.index('pound')
+        elif recovered_word.startswith('$'):
+            if original_segment_words.count('dollars') > 0:
+                numerical_removals = original_segment_words.index('dollars')
+            elif original_segment_words.count('dollar') > 0:
+                numerical_removals = original_segment_words.index('dollar')
+        elif recovered_word.startswith('€'):
+            if original_segment_words.count('euros') > 0:
+                numerical_removals = original_segment_words.index('euros')
+            elif original_segment_words.count('euro') > 0:
+                numerical_removals = original_segment_words.index('euro')
+
+        else:
+            # Align original natural language numbers to recovered digits
+            mapping = self.align_original_recovered(original_segment_words, recovered_words_lst[current_recovered_index:])
+
+            grouped_orig_words = mapping[position][0]
+
+            # failsafe if mapping for element in question contents spill over onto the next element
+            if len(mapping) > position + 1 and len(mapping[position + 1][0]) > 1 and not re.sub(r"[^0-9]", "", mapping[position + 1][1][0]):
+                grouped_orig_words.extend(mapping[position + 1][0][:-1])
+
+            numerical_removals = len(grouped_orig_words) - 1
+
+        return numerical_removals
+
+    @classmethod
+    def load(cls, model_path=None, bbc_data_loc=False):
+        # if bbc_data_loc:
+        #     try:
+        #         logger.info('Searching for existing model files at default bbc-data location')
+        #         model_loc = bbc.data.path(model_path)
+        #         model_loc = model_loc + '/bert-restore-punctuation'
+        #         logger.info('Successfully located model files')
+        #     except bbc.data.exceptions.DatasetNotInstalledError:
+        #         logger.error('Dataset not found at default bbc-data path.')
+        #         logger.error('Original error message:')
+        #         logger.error(traceback.format_exc())
+        #         logger.error('Please ensure wormhole credentials are set, and then run\
+        #             `bbc-data pull %s` to download model files' %model_path)
+        #         logger.error('Exiting')
+        #         sys.exit(1)
+        #     except Exception:
+        #         logger.error('Unable to use bbc-data, please ensure wormhole credentials are set')
+        #         logger.error('Exiting')
+        #         sys.exit(1)
+
+        model_loc = model_path
+        rpunct_recoverer = RPunctRecoverer(model_location=model_loc)
+
+        return rpunct_recoverer
 
     def run(self, input_path, output_file_path=None, compute_wer=False):
         # Read input text

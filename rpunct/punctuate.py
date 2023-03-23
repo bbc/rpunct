@@ -7,6 +7,7 @@ __email__ = "daulet.nurmanbetov@gmail.com"
 import re
 import os
 import json
+import string
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
@@ -196,7 +197,7 @@ class RestorePuncts:
                     punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
-            if label[0] != "O":
+            if label[0] != "O" and punct_wrd[-1] not in string.punctuation:
                 punct_wrd += label[0]
 
             punct_resp += punct_wrd + " "
