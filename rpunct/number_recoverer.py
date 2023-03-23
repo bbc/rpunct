@@ -5,8 +5,9 @@ Module supporting punctuation recovery and post-processing of raw STT output.
 """
 import re
 import string
+from kaldialign import align
 from num2words import num2words
-from number_parser import parse as number_parser
+from number_parser import parse as number_parser, parse_number as individual_number_parser
 
 TERMINALS = ['.', '!', '?']
 
@@ -35,6 +36,15 @@ DECADES = {
     'nineties': '90s'
 }
 
+ORDINALS = [
+    "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
+    "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth", "Thirteenth",
+    "Fourteenth", "Fifteenth", "Sixteenth", "Seventeenth", "Eighteenth",
+    "Nineteenth", "Twentieth", "Thirtieth", "Fortieth", "Fiftieth",
+    "Sixtieth", "Seventieth", "Eightieth", "Ninetieth", "Hundredth",
+    "Thousandth", "Millionth", "Billionth"
+]
+
 
 class NumberRecoverer:
     """
@@ -49,12 +59,12 @@ class NumberRecoverer:
         self.restore_decimals = restore_decimals
         self.restore_percentages = restore_percentages
 
-    def process(self, text):
+    def process(self, input_text):
         """
         Pipeline for recovering formatting of numbers within a piece of text.
         """
         # Convert numerical strings to digits in text using `number_parser` package
-        parsed_text = self.number_parser(text)
+        parsed_text = self.number_parser(input_text)
 
         # Convert percentages to use the symbol notation
         if self.restore_percentages:
@@ -91,12 +101,14 @@ class NumberRecoverer:
                 else:
                     output_text += word + " "
 
+        # Restore/format ordinal numbers
+        output_text = self.recover_ordinals(input_text, output_text)
+
         # Remove any unwanted whitespace
         output_text = output_text.strip()
         output_text = output_text.replace(" - ", "-")
         output_text = output_text.replace("- ", "-")
-
-        text = re.sub(r'([0-9]*)-([0-9]*)', r'\1\2', text)  # remove unwanted segmenting of numbers
+        output_text = re.sub(r'([0-9]*)-([0-9]*)', r'\1\2', output_text)  # remove unwanted segmenting of numbers
 
         return output_text
 
@@ -141,6 +153,14 @@ class NumberRecoverer:
     def is_date_decade(self, word):
         """Checks if a word is a natural language date term specifying a decade (e.g. nineties)"""
         return word in DECADES.keys()
+
+    @staticmethod
+    def is_ordinal(text):
+        """Checks if a natural language number is an ordinal"""
+        if text.capitalize() in ORDINALS:
+            return True
+        else:
+            return False
 
     @staticmethod
     def replace_decimal_points(text_list):
@@ -303,3 +323,54 @@ class NumberRecoverer:
         output = " ".join(output_text_list[:-1]) + " " + output_text_list[-1][:2] + DECADES[decade] + " "
 
         return output
+
+    @staticmethod
+    def format_ordinal(number):
+        if number.isnumeric():
+            number = int(number)
+        else:
+            number = individual_number_parser(number)
+
+        if number < 10:
+            ordinal_word = num2words(number, to='ordinal')
+        else:
+            ordinal_function = lambda n: "%s%s" % ("{:,}".format(n),"tsnrhtdd"[(n//10%10 != 1) * (n%10 < 4) * n%10::4])
+            ordinal_word = ordinal_function(number)
+
+        return ordinal_word
+
+    def recover_ordinals(self, plain, recovered):
+        # Align number recovered text with original s.t. we can find where ordinals have been lost
+        plain = plain.split(" ")
+        recovered = recovered.split(" ")
+
+        stripped_recovered = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered]
+        stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
+
+        EPS = '*'
+        alignment = align(plain, stripped_recovered, EPS)
+        mapping = []
+
+        print(alignment)
+
+        for ref, hyp in alignment:
+            if ref == EPS:
+                # insertion (one-to-many)
+                raise ValueError("Insertion found and not handled.")
+            elif hyp == EPS:
+                # deletion (many-to-one)
+                mapping[-1][0].append(ref)  # append new word to multi-word element
+            else:
+                # single substitution (one-to-one mapping)
+                mapping.append([[ref], [hyp]])
+
+        formatted_output = ""
+
+        for plain_words, rec_word in mapping:
+            if self.is_ordinal(plain_words[-1]):
+                ordinal_word = self.format_ordinal(rec_word[0])
+                formatted_output += ordinal_word + " "
+            else:
+                formatted_output += rec_word[0] + " "
+
+        return formatted_output

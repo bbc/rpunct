@@ -108,7 +108,7 @@ class RPunctRecoverer:
         # set lowercase and replace certain characters
         text = truth_text.lower()
 
-        text = text.replace("[music]", "").replace("[music playing]", "").replace("(crowd cheering)", "").replace("(crowd shouting)", "").replace("(gentle music)", "").replace("(dramatic music)", "").replace("[clock ticking]", "")
+        text = text.replace("[music]", "").replace("[music playing]", "").replace("(crowd cheering)", "").replace("(crowd shouting)", "").replace("(crowd chattering)", "").replace("(people chattering)", "").replace("(gentle music)", "").replace("(dramatic music)", "").replace("(upbeat music)", "").replace("(soft music)", "").replace("[clock ticking]", "").replace("(engine rumbling)", "").replace("(somber music)", "").replace("[speaking russian]", "").replace("(speaking russian)", "").replace("(speaking in foreign language)", "").replace("(phone ringing)", "").replace("(thunder rumbling)", "").replace("[sirens]", "")
 
         text = text.replace("\n", " ")
         text = text.replace(" - ", " ")
