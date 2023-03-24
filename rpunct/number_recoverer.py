@@ -9,7 +9,6 @@ from kaldialign import align
 from num2words import num2words
 from number_parser import parse as number_parser, parse_number as individual_number_parser
 
-
 TERMINALS = ['.', '!', '?']
 
 STRING_NUMBERS = {
@@ -78,8 +77,7 @@ class NumberRecoverer:
 
         # Correct currencies, BBC styling of numbers, and insert currency separators into numbers >= 10,000
         output_text = ""
-        for i in range(len(parsed_list)):
-            word = parsed_list[i]
+        for i, word in enumerate(parsed_list):
             stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower()
 
             if stripped_word:

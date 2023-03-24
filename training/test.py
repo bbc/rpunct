@@ -9,12 +9,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from simpletransformers.ner import NERModel
-from training.prep_data import VALID_LABELS
+from rpunct.punctuate import VALID_LABELS
 
-sns.set_theme(style="darkgrid")
-sns.set(rc={'figure.figsize':(10, 7), 'figure.dpi':100, 'savefig.dpi':100})
+# sns.set_theme(style="darkgrid")
+# sns.set(rc={'figure.figsize':(10, 7), 'figure.dpi':100, 'savefig.dpi':100})
+plt.style.use('two-panel')
 
-PATH = './training/datasets/'
+DATA_PATH = './training/datasets/'
 RESULTS_PATH = './tests/'
 
 
@@ -38,10 +39,11 @@ def e2e_test(models, data_source='news-transcripts', use_cuda=True, output_file=
         count += 1
 
         # Evaluate it on the test dataset to give precision/recall metrics
-        test_data_txt = os.path.join(PATH, data_source, 'rpunct_test_set.txt')
+        test_data_txt = os.path.join(DATA_PATH, data_source, 'rpunct_test_set.txt')
         metrics, _, _ = model.eval_model(test_data_txt, output_dir=RESULTS_PATH)
-        print(f"\n\t* Results: {metrics}")
+
         all_metrics.append(metrics)
+        print(f"\n\t* Results: {metrics}")
 
     compare_models(all_metrics, models, out_png=output_file, data_type=data_source)
 
@@ -79,6 +81,28 @@ def compare_models(results, model_locations, out_png='model_performance.png', da
     fig, ax = plt.subplots(1, 1)
     sns.barplot(ax=ax, x='Metrics', y='Results', hue='Model', data=df)
     ax.set(title=f"Test Performance of Optimised Models ({data_type} data)")
+
+    # set highest result for each metric to be more opaque than the rest
+    count = 0
+    for model in ax.containers:
+        for bar in model:
+            metric = df['Metrics'][count]
+            result = df['Results'][count]
+            metric_max = max(df[df['Metrics'] == metric]['Results'])
+
+            if result == metric_max:
+                bar.set_edgecolor('000')
+                bar.set_zorder(2)
+            else:
+                bar.set_alpha(0.6)
+
+            count += 1
+
+    # plot details
+    plt.xticks(rotation=90)
+    plt.ylim(min(df['Results'].replace(0.0, 1.0)) - 0.05, max(df['Results']) + 0.05)
+    plt.legend(loc=1)
+    plt.tight_layout()
 
     fig.savefig(plot_path)
     print(f"\n> Performance comparison saved to: {plot_path}")

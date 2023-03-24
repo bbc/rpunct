@@ -13,12 +13,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from training.get_data import *
+from rpunct.punctuate import VALID_LABELS, PUNCT_LABELS
 
-PATH = './training/datasets/'
 WORDS_PER_FILE = 35000000
-PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
-CAPI_LABELS = ['O', 'C', 'U', 'M']
-VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 
 
 def e2e_data(data_type='news-transcripts', tt_split='90:10',
@@ -201,7 +198,7 @@ def create_record(text, mixed_casing=False):
             continue
 
         # Collect trailing punctuation for this word's label
-        if not obs[-1].isalnum():
+        if not obs[-1].isalnum() and obs[-1] in PUNCT_LABELS:
             new_lab = obs[-1]
         else:
             new_lab = "O"  # `O` => no punctuation
@@ -268,10 +265,10 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
         # Cycle through the start/end chunk index tuples forming data blocks of uniform dimensions
         observations = np.empty(shape=(len(splits), 500, 3), dtype=object)
 
-        with tqdm(range(len(splits))) as S:
+        with tqdm(enumerate(splits)) as S:
             S.set_description(f"{' ' * 15} - Splitting data chunk {_round + 1} ")
-            for j in S:
-                a, b = splits[j][0], splits[j][1]
+            for j, split in S:
+                a, b = split[0], split[1]
                 data_slice = records.iloc[a: b, ].values.tolist()  # collect the 500 word-label dicts between the specified indices
                 data_slice = np.pad(data_slice, [(0, 500 - len(data_slice)), (0, 0)], 'empty')
 

@@ -83,11 +83,11 @@ class RPunctRecoverer:
         transcript_segments = [[re.sub(r"[^0-9a-zA-Z']", "", item.content).lower() for item in sublist] for sublist in input_segments]
         recovered_segment_words = []
 
-        with tqdm(range(len(transcript_segments))) as T:
+        with tqdm(transcript_segments) as T:
             T.set_description("Restoring transcript punctuation")
             for segment in T:
                 # Conduct punctuation recovery process on segment transcript via RPunct
-                transcript = ' '.join(transcript_segments[segment]).strip(' ')
+                transcript = ' '.join(segment).strip(' ')
 
                 # Conduct number recovery process on segment transcript via NumberRecoverer
                 if num_rec:
@@ -315,7 +315,7 @@ class RPunctRecoverer:
             grouped_orig_words = mapping[position][0]
 
             # failsafe if mapping for element in question contents spill over onto the next element
-            if len(mapping) > position + 1 and len(mapping[position + 1][0]) > 1 and not re.sub(r"[^0-9]", "", mapping[position + 1][1][0]):
+            if len(mapping) > position + 1 and len(mapping[position + 1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[position + 1][1][0]):
                 grouped_orig_words.extend(mapping[position + 1][0][:-1])
 
             numerical_removals = len(grouped_orig_words) - 1

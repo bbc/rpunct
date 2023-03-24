@@ -8,12 +8,11 @@ import os
 from simpletransformers.ner import NERModel
 import matplotlib.pyplot as plt
 import seaborn as sns
-from training.prep_data import VALID_LABELS
+from rpunct.punctuate import VALID_LABELS
+from training.get_data import PATH
 
 sns.set_theme(style="darkgrid")
 sns.set(rc={'figure.figsize':(10, 7), 'figure.dpi':100, 'savefig.dpi':100})
-
-PATH = './training/datasets/'
 
 
 def e2e_train(
