@@ -53,7 +53,7 @@ class RestorePuncts:
         """
         # Restoration pipeline
         segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
-        preds_lst = self.predict(segments, silent=False)  # Generate word-level punctuation predictions
+        preds_lst = self.predict(segments)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
         punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
 
@@ -207,7 +207,8 @@ class RestorePuncts:
         punct_resp = punct_resp.replace("- ", "-")
         punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
 
-        punct_resp = re.sub(r"([0-9]+)-([0-9]+)", r'\1\2', punct_resp)  # remove unwanted segmenting of numbers
+        # remove unwanted segmenting of numbers
+        punct_resp = re.sub(r"([0-9]+)[-:; ]([0-9]+)", r'\1\2', punct_resp)
 
         # Ensure text ends with a terminal
         if punct_resp[-1].isalnum():
@@ -248,7 +249,7 @@ class RestorePuncts:
         return correct_capitalisation
 
 
-def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False, ):
+def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False):
     """
     Pipeline that forms an RestorePuncts object to conduct punctuation restoration over an input file of plaintext using the specified RPunct model.
     """

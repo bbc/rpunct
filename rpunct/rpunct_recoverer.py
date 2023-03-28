@@ -193,9 +193,10 @@ class RPunctRecoverer:
 
             # Itemise segment words (taking into account that recovered segment may be fewer words due to hyphenation)
             index_orig = 0
+            index_rec = 0
             total_fewer_words = 0
 
-            for index_rec in range(len(recovered_segment)):
+            while index_orig < len(original_segment) and index_rec < len(recovered_segment):
                 # Get original and restored word from segment
                 orig_item = original_segment[index_orig]
                 rec_word = recovered_segment[index_rec]
@@ -205,14 +206,9 @@ class RPunctRecoverer:
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
                     no_skip_words = rec_word.count('-')
 
-                    # If any part of hyphenation is numerical, include the skipped words that have been converted to digits
+                    # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
                     if re.sub(r"[^0-9]", "", rec_word):
-                        split_word = rec_word.split('-')
-
-                        for sub_word_index in range(len(split_word)):
-                            if re.sub(r"[^0-9]", "", split_word[sub_word_index]):
-                                no_skip_words += self.calc_end_item_index(original_segment, index_orig, recovered_segment, index_rec, position=sub_word_index)
-                                # print(f" * [seg {index_segment} word {index_rec}] Original: {orig_item.content}...{original_segment[index_orig + no_skip_words].content}; Recovered: {rec_word}; Removed: {no_skip_words} / {total_fewer_words};")
+                        no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
 
                     # Find the final word of the hyphenation in the orginal segments list
                     end_item = original_segment[index_orig + no_skip_words]
@@ -224,9 +220,10 @@ class RPunctRecoverer:
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
 
-                # number recovery case
-                elif re.sub(r"[^0-9]", "", rec_word):
-                    no_skip_words = self.calc_end_item_index(original_segment, index_orig, recovered_segment, index_rec)
+                    # print(f"[HYPH] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word};")
+
+                elif re.sub(r"[^0-9]", "", rec_word):  # number recovery case
+                    no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
                     end_item = original_segment[index_orig + no_skip_words]
 
                     new_item = Item(orig_item.start_time, end_item.end_time, rec_word)
@@ -234,13 +231,30 @@ class RPunctRecoverer:
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
 
-                else:
+                    # print(f"[NUMB] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word};")
+
+                else:  # one-to-one mapping case
                     # Itemise with word & start/end times from associated original item
                     new_item = Item(orig_item.start_time, orig_item.end_time, rec_word)
+
+                    # print(f"[1-2-1] Original word: {orig_item.content}; Recovered word: {rec_word};")
 
                 # Return new itemised word to the segment
                 recovered_segment[index_rec] = new_item
                 index_orig += 1
+                index_rec += 1
+
+            # Verify all recovered words have been itemised
+            try:
+                assert index_rec == len(recovered_segment), \
+                    f"While reconstructing segment structure, one or more recovered words have been missed. \
+                        \n Original text: {[item.content for item in original_segment]} \
+                        \n Recovered text: {[item.content for item in recovered_segment]}"
+            except AttributeError:
+                assert index_rec == len(recovered_segment), \
+                    f"While reconstructing segment structure, one or more recovered words have been missed. \
+                        \n Original text: {[item.content for item in original_segment]} \
+                        \n Recovered text: {[item for item in recovered_segment]}"
 
             # Verify that the reconstructed segment is the same length as original (excluding words removed by hyphenation)
             assert len(recovered_segment) == (len(original_segment) - total_fewer_words), \
@@ -259,7 +273,7 @@ class RPunctRecoverer:
         stripped_recovered_lst = " ".join(stripped_recovered_lst).split(" ")
 
         EPS = '*'
-        alignment = align(original_lst, recovered_lst, EPS)
+        alignment = align(original_lst, stripped_recovered_lst, EPS)
         mapping = []
 
         for ref, hyp in alignment:
@@ -276,13 +290,13 @@ class RPunctRecoverer:
         return mapping
 
 
-    def calc_end_item_index(self, plaintext_items_lst, current_plaintext_index, recovered_words_lst, current_recovered_index, position=0):
+    def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst):
         # Generate clean list of original words
-        original_segment_words = [item.content.lower() for item in plaintext_items_lst[current_plaintext_index:]]
+        original_segment_words = [item.content.lower() for item in plaintext_items_lst]
 
         # If the recovered word has a percent sign the index of the word 'percent' in the original text gives number of removals
         # Similar technique if a currency symbol is present
-        recovered_word = recovered_words_lst[current_recovered_index]
+        recovered_word = recovered_words_lst[0]
         numerical_removals = 0
 
         if recovered_word.endswith('%'):
@@ -310,13 +324,12 @@ class RPunctRecoverer:
 
         else:
             # Align original natural language numbers to recovered digits
-            mapping = self.align_original_recovered(original_segment_words, recovered_words_lst[current_recovered_index:])
-
-            grouped_orig_words = mapping[position][0]
+            mapping = self.align_original_recovered(original_segment_words, recovered_words_lst)
+            grouped_orig_words = mapping[0][0]
 
             # failsafe if mapping for element in question contents spill over onto the next element
-            if len(mapping) > position + 1 and len(mapping[position + 1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[position + 1][1][0]):
-                grouped_orig_words.extend(mapping[position + 1][0][:-1])
+            if len(mapping) > 1 and len(mapping[1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[1][1][0]):
+                grouped_orig_words.extend(mapping[1][0][:-1])
 
             numerical_removals = len(grouped_orig_words) - 1
 

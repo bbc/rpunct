@@ -11,8 +11,6 @@ import seaborn as sns
 from simpletransformers.ner import NERModel
 from rpunct.punctuate import VALID_LABELS
 
-# sns.set_theme(style="darkgrid")
-# sns.set(rc={'figure.figsize':(10, 7), 'figure.dpi':100, 'savefig.dpi':100})
 plt.style.use('two-panel')
 
 DATA_PATH = './training/datasets/'
