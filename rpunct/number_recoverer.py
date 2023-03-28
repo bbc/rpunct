@@ -20,7 +20,8 @@ STRING_NUMBERS = {
 CURRENCIES = {
     'pound': '£',
     'euro': '€',
-    'dollar': '$'
+    'dollar': '$',
+    'yen': '¥'
 }
 
 DECADES = {
@@ -66,6 +67,10 @@ class NumberRecoverer:
         # Convert numerical strings to digits in text using `number_parser` package
         parsed_text = self.number_parser(input_text)
 
+        # Initial currency restoration: 'X pence' -> 'Xp'
+        if self.correct_currencies:
+            parsed_text = self.convert_pence_to_p(parsed_text)
+
         # Convert percentages to use the symbol notation
         if self.restore_percentages:
             parsed_text = self.insert_percentage_symbols(parsed_text)
@@ -82,7 +87,7 @@ class NumberRecoverer:
 
             if stripped_word:
                 # Restore currency words to their symbols
-                if self.correct_currencies and self.is_currency(stripped_word):
+                if self.correct_currencies and self.is_currency_symbol(stripped_word):
                         output_text = self.insert_currency_symbols(output_text, word)
 
                 # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
@@ -141,7 +146,7 @@ class NumberRecoverer:
         return parsed
 
     @staticmethod
-    def is_currency(word):
+    def is_currency_symbol(word):
         """Checks if a word is a currency term."""
         return (word in CURRENCIES.keys()) or (word[-1] == 's' and word[:-1] in CURRENCIES.keys())
 
@@ -205,6 +210,7 @@ class NumberRecoverer:
         """
         # Get plaintext version of currency keyword
         stripped_currency = re.sub(r"[^0-9a-zA-Z]", "", currency).lower()
+
         if stripped_currency[-1] == 's':
             stripped_currency = stripped_currency[:-1]
 
@@ -250,11 +256,21 @@ class NumberRecoverer:
         return text
 
     @staticmethod
+    def convert_pence_to_p(text):
+        """
+        Converts the natural language term 'pence' in text to the symbol 'p' following a monetary value.
+        """
+        text = re.sub(r'([0-9]+) pence', r'\1p', text)
+
+        return text
+
+
+    @staticmethod
     def insert_percentage_symbols(text):
         """
         Converts the natural language term 'percent' in text to the symbol '%' if following a digit.
         """
-        text = re.sub(r'([0-9]+) percent', r'\1%', text)
+        text = re.sub(r'([0-9]+[0-9.]*) percent', r'\1%', text)
 
         return text
 
@@ -265,7 +281,7 @@ class NumberRecoverer:
         """
         if not number[-1].isnumeric():
             # Don't convert number if it is involved with some mathematical/currency expression
-            if number[-1] in ['%', '*', '+', '<', '>', '$', '£', '€']:
+            if number[-1] in ['%', 'p']:
                 text += number + " "
                 return text
             # But separate off any trailing punctuation other than this and continue
@@ -343,8 +359,8 @@ class NumberRecoverer:
         plain = plain.split(" ")
         recovered = recovered.split(" ")
 
-        stripped_recovered = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered]
-        stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
+        stripped_recovered = [item.replace("-", " ") for item in recovered]
+        stripped_recovered = " ".join(stripped_recovered).split(" ")
 
         EPS = '*'
         alignment = align(plain, stripped_recovered, EPS)
@@ -362,7 +378,6 @@ class NumberRecoverer:
                 mapping.append([[ref], [hyp]])
 
         formatted_output = ""
-
         for plain_words, rec_word in mapping:
             if self.is_ordinal(plain_words[-1]):
                 ordinal_word = self.format_ordinal(rec_word[0])

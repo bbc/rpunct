@@ -171,7 +171,10 @@ class RestorePuncts:
             word, label = i
 
             # Implement capitalisation (lowercase/capitalised/uppercase/mixed-case)
-            if label[-1] == "U":  # `xU` => uppercase
+            if re.sub(r'[^£$€]', '', word) or label[-1] == "O":  # `xO` => lowercase & don't capitalise if part of a currency
+                punct_wrd = word
+
+            elif label[-1] == "U":  # `xU` => uppercase
                 punct_wrd = word.upper()
 
                 if len(word) > 2 and word[-2:] == "'S":
@@ -189,12 +192,12 @@ class RestorePuncts:
                 else:
                     punct_wrd = self.fetch_mixed_casing(word)  # general mixed-case
 
-            else:  # `xO` => lowercase
-                punct_wrd = word
+            else:
+                raise ValueError(f"Invalid capitalisation label: '{label[-1]}'")
 
-                # Ensure terminals are followed by capitals
-                if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
-                    punct_wrd = punct_wrd.capitalize()
+            # Ensure terminals are followed by capitals
+            if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
+                punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
             if label[0] != "O" and label[0] in PUNCT_LABELS and punct_wrd[-1] not in PUNCT_LABELS:
@@ -208,7 +211,7 @@ class RestorePuncts:
         punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
 
         # remove unwanted segmenting of numbers
-        punct_resp = re.sub(r"([0-9]+)[-:; ]([0-9]+)", r'\1\2', punct_resp)
+        punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
         # Ensure text ends with a terminal
         if punct_resp[-1].isalnum():

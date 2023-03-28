@@ -68,7 +68,7 @@ class RPunctRecoverer:
         # Conduct number recovery process on segment transcript via NumberRecoverer
         if num_rec:
             recovered = self.number_recoverer.process(transcript)
-            # print('\nNumber recovered: \n', transcript)
+            # print('\nNumber recovered: \n', recovered)
         else:
             recovered = transcript
 
@@ -97,9 +97,6 @@ class RPunctRecoverer:
 
                 # Conduct punctuation recovery process on segment transcript via RPunct
                 recovered = self.recoverer.punctuate(recovered)
-
-                # TEMPORARY FIX
-                recovered = recovered.replace("%%", "%")
 
                 # Format recovered transcript back into list of segments
                 recovered_words = recovered.split(' ')
@@ -268,6 +265,70 @@ class RPunctRecoverer:
             all_recovered_segments[index_segment] = recovered_segment
 
         return all_recovered_segments
+
+    def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0):
+        # Generate clean list of original words
+        original_segment_words = [item.content.lower() for item in plaintext_items_lst]
+
+        # If the recovered word has a percent sign the index of the word 'percent' in the original text gives number of removals
+        # Similar technique if a currency symbol is present
+        recovered_word = recovered_words_lst[0]
+        numerical_removals = 0
+
+        if recovered_word.endswith('%'):
+            if original_segment_words.count('percent') > 0:
+                try:
+                    numerical_removals = original_segment_words.index('percent')
+                except ValueError:
+                    raise ValueError(f"Can't find 'percent' in list. Recovered word: {recovered_word}, original segment: {original_segment_words}.")
+
+        elif recovered_word.startswith('£'):
+            if original_segment_words.count('pounds') > 0:
+                numerical_removals = original_segment_words.index('pounds')
+            elif original_segment_words.count('pound') > 0:
+                numerical_removals = original_segment_words.index('pound')
+        elif recovered_word.startswith('$'):
+            if original_segment_words.count('dollars') > 0:
+                numerical_removals = original_segment_words.index('dollars')
+            elif original_segment_words.count('dollar') > 0:
+                numerical_removals = original_segment_words.index('dollar')
+        elif recovered_word.startswith('€'):
+            if original_segment_words.count('euros') > 0:
+                numerical_removals = original_segment_words.index('euros')
+            elif original_segment_words.count('euro') > 0:
+                numerical_removals = original_segment_words.index('euro')
+
+        else:
+            # Align original natural language numbers to recovered digits
+            original_lst = original_segment_words[position:]
+            stripped_recovered_lst = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered_words_lst]
+            stripped_recovered_lst = " ".join(stripped_recovered_lst).split(" ")
+            stripped_recovered_lst = stripped_recovered_lst[position:]
+
+            EPS = '*'
+            alignment = align(original_lst, stripped_recovered_lst, EPS)
+            mapping = []
+
+            for ref, hyp in alignment:
+                if ref == EPS:
+                    # insertion (one-to-many)
+                    mapping[-1][1].append(hyp)
+                elif hyp == EPS:
+                    # deletion (many-to-one)
+                    mapping[-1][0].append(ref)  # append new word to multi-word element
+                else:
+                    # single substitution (one-to-one mapping)
+                    mapping.append([[ref], [hyp]])
+
+            grouped_orig_words = mapping[0][0]
+
+            # failsafe if mapping for element in question contents spill over onto the next element
+            if len(mapping) > 1 and len(mapping[1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[1][1][0]):
+                grouped_orig_words.extend(mapping[1][0][:-1])
+
+            numerical_removals = len(grouped_orig_words) - 1
+
+        return numerical_removals
 
     def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0):
         # Generate clean list of original words
