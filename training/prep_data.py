@@ -151,7 +151,7 @@ def create_rpunct_dataset(directory, data_type, train_or_test='train', make_mc_d
     # Constuct list of text words and labels (punctuation tag per word) over the dataset
     all_records = []
     with tqdm(data_split['text']) as T:
-        T.set_description(f"{' ' * 7} * Labelling {train_or_test}ing instances ")
+        T.set_description(f"{' ' * 7} * Labelling {train_or_test}ing instances {' ' if train_or_test == 'test' else ''}")
         for segment in T:
             # Create a list enumerating each word in an input segment of text and its label: [...{id, word, label}...]
             record, mixed_case_instances = create_record(segment, mixed_casing=make_mc_database)
@@ -250,8 +250,8 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
     random.seed(42)
     _round = 0
 
-    print("\n\t* Segmenting data into chunks:")
-    print(f"\t\t- No. words in {train_or_test} set : {num_words}")
+    print(f"\t* Segmenting data into chunks  :")
+    print(f"\t\t- No. words in {train_or_test} set {' ' if train_or_test == 'test' else ''}: {num_words}")
 
     # Segment dataset into `num_splits` chunks
     while _round < num_splits:
@@ -265,10 +265,10 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
         # Cycle through the start/end chunk index tuples forming data blocks of uniform dimensions
         observations = np.empty(shape=(len(splits), 500, 3), dtype=object)
 
-        with tqdm(enumerate(splits)) as S:
+        with tqdm(range(len((splits)))) as S:
             S.set_description(f"{' ' * 15} - Splitting data chunk {_round + 1} ")
-            for j, split in S:
-                a, b = split[0], split[1]
+            for j in S:
+                a, b = splits[j][0], splits[j][1]
                 data_slice = records.iloc[a: b, ].values.tolist()  # collect the 500 word-label dicts between the specified indices
                 data_slice = np.pad(data_slice, [(0, 500 - len(data_slice)), (0, 0)], 'empty')
 
@@ -285,7 +285,7 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
         with open(out_path, 'wb') as f:
             np.save(f, observations, allow_pickle=True)
 
-        print(f"\t\t- Outputting data file {_round + 1} : {out_path}")
+        print(f"\t\t- Outputting data file {_round} : {out_path}")
         del records
         del observations
 
@@ -329,7 +329,7 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
     Prepares data from original text into Connnl formatted datasets ready for training.
     In addition constraints label space to only labels we care about.
     """
-    print("\n\t* Finalising output dataset:")
+    print("\t* Finalising output dataset    :")
 
     # Create output dataset paths
     output_txt = f'rpunct_{train_or_test}_set.txt'
@@ -357,7 +357,7 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
     else:
         train_set = token_data
 
-    print(f"\t\t- {train_or_test.replace('_', ' ').capitalize()}ing dataset shape {' ' * 7} : ({len(train_set)}, {len(train_set[0])}, {len(train_set[0][0])})")
+    print(f"\t\t- {train_or_test.capitalize()}ing dataset shape {' ' * 7 if train_or_test == 'train' else ' ' * 8} : ({len(train_set)}, {len(train_set[0])}, {len(train_set[0][0])})")
 
     # Format training set as Connl NER txt file
     create_text_file(train_set, dataset_path)
