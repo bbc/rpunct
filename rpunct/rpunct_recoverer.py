@@ -208,7 +208,9 @@ class RPunctRecoverer:
 
                     # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
                     if re.sub(r"[^0-9]", "", rec_word):
-                        no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
+                        # if in the case of a hyphenation + digitiation, must find where the digitisation happens within the hyphenation and start from here
+                        start_position = [bool(re.sub(r"[^0-9]", "", subword)) for subword in rec_word.split('-')].index(True)
+                        no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=start_position)
 
                     # Find the final word of the hyphenation in the orginal segments list
                     end_item = original_segment[index_orig + no_skip_words]
@@ -220,7 +222,7 @@ class RPunctRecoverer:
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
 
-                    # print(f"[HYPH] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word};")
+                    # print(f"[HYPH] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word}; No. removed words: {no_skip_words};")
 
                 elif re.sub(r"[^0-9]", "", rec_word):  # number recovery case
                     no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
@@ -231,7 +233,7 @@ class RPunctRecoverer:
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
 
-                    # print(f"[NUMB] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word};")
+                    # print(f"[NUMB] Original word: {orig_item.content}...{end_item.content}; Recovered word: {rec_word}; No. removed words: {no_skip_words};")
 
                 else:  # one-to-one mapping case
                     # Itemise with word & start/end times from associated original item
@@ -267,30 +269,7 @@ class RPunctRecoverer:
 
         return all_recovered_segments
 
-    @staticmethod
-    def align_original_recovered(original_lst, recovered_lst):
-        stripped_recovered_lst = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered_lst]
-        stripped_recovered_lst = " ".join(stripped_recovered_lst).split(" ")
-
-        EPS = '*'
-        alignment = align(original_lst, stripped_recovered_lst, EPS)
-        mapping = []
-
-        for ref, hyp in alignment:
-            if ref == EPS:
-                # insertion (one-to-many)
-                raise ValueError("Insertion found and not handled.")
-            elif hyp == EPS:
-                # deletion (many-to-one)
-                mapping[-1][0].append(ref)  # append new word to multi-word element
-            else:
-                # single substitution (one-to-one mapping)
-                mapping.append([[ref], [hyp]])
-
-        return mapping
-
-
-    def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst):
+    def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0):
         # Generate clean list of original words
         original_segment_words = [item.content.lower() for item in plaintext_items_lst]
 
@@ -324,7 +303,26 @@ class RPunctRecoverer:
 
         else:
             # Align original natural language numbers to recovered digits
-            mapping = self.align_original_recovered(original_segment_words, recovered_words_lst)
+            original_lst = original_segment_words[position:]
+            stripped_recovered_lst = [re.sub(r"[^0-9a-zA-Z'%£$€ ]", "", item.replace("-", " ")).lower() for item in recovered_words_lst]
+            stripped_recovered_lst = " ".join(stripped_recovered_lst).split(" ")
+            stripped_recovered_lst = stripped_recovered_lst[position:]
+
+            EPS = '*'
+            alignment = align(original_lst, stripped_recovered_lst, EPS)
+            mapping = []
+
+            for ref, hyp in alignment:
+                if ref == EPS:
+                    # insertion (one-to-many)
+                    mapping[-1][1].append(hyp)
+                elif hyp == EPS:
+                    # deletion (many-to-one)
+                    mapping[-1][0].append(ref)  # append new word to multi-word element
+                else:
+                    # single substitution (one-to-one mapping)
+                    mapping.append([[ref], [hyp]])
+
             grouped_orig_words = mapping[0][0]
 
             # failsafe if mapping for element in question contents spill over onto the next element
