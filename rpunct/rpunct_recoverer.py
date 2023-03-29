@@ -213,7 +213,7 @@ class RPunctRecoverer:
                     end_item = original_segment[index_orig + no_skip_words]
 
                     # Itemise with word & start/end times from 1st/last word of the hyphenation
-                    new_item = Item(orig_item.start_time, end_item.end_time, rec_word)
+                    new_item = Item(round(orig_item.start_time, 3), round(end_item.end_time, 3), rec_word)
 
                     # Increment original segments list to jump to the end of the hyphenated word
                     index_orig += no_skip_words
@@ -225,7 +225,7 @@ class RPunctRecoverer:
                     no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
                     end_item = original_segment[index_orig + no_skip_words]
 
-                    new_item = Item(orig_item.start_time, end_item.end_time, rec_word)
+                    new_item = Item(round(orig_item.start_time, 3), round(end_item.end_time, 3), rec_word)
 
                     index_orig += no_skip_words
                     total_fewer_words += no_skip_words
@@ -234,7 +234,7 @@ class RPunctRecoverer:
 
                 else:  # one-to-one mapping case
                     # Itemise with word & start/end times from associated original item
-                    new_item = Item(orig_item.start_time, orig_item.end_time, rec_word)
+                    new_item = Item(round(orig_item.start_time, 3), round(orig_item.end_time, 3), rec_word)
 
                     # print(f"[1-2-1] Original word: {orig_item.content}; Recovered word: {rec_word};")
 

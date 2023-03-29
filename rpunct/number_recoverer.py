@@ -360,7 +360,7 @@ class NumberRecoverer:
         recovered = recovered.split(" ")
 
         stripped_recovered = [item.replace("-", " ") for item in recovered]
-        stripped_recovered = " ".join(stripped_recovered).split(" ")
+        stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
 
         EPS = '*'
         alignment = align(plain, stripped_recovered, EPS)
