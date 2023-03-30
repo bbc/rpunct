@@ -5,9 +5,13 @@ Module supporting punctuation recovery and post-processing of raw STT output.
 """
 import re
 import string
-from kaldialign import align
 from num2words import num2words
 from number_parser import parse as number_parser, parse_number as individual_number_parser
+
+try:
+    from rpunct.utils import *
+except ModuleNotFoundError:
+    from utils import *
 
 TERMINALS = ['.', '!', '?']
 
@@ -357,27 +361,12 @@ class NumberRecoverer:
     def recover_ordinals(self, plain, recovered):
         # Align number recovered text with original s.t. we can find where ordinals have been lost
         plain = plain.split(" ")
-        recovered = recovered.split(" ")
-
-        stripped_recovered = [item.replace("-", " ") for item in recovered]
+        stripped_recovered = [item.replace("-", " ") for item in recovered.split(" ")]
         stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
 
-        EPS = '*'
-        alignment = align(plain, stripped_recovered, EPS)
-        mapping = []
-
-        for ref, hyp in alignment:
-            if ref == EPS:
-                # insertion (one-to-many)
-                raise ValueError("Insertion found and not handled.")
-            elif hyp == EPS:
-                # deletion (many-to-one)
-                mapping[-1][0].append(ref)  # append new word to multi-word element
-            else:
-                # single substitution (one-to-one mapping)
-                mapping.append([[ref], [hyp]])
-
+        mapping = align_texts(plain, stripped_recovered)
         formatted_output = ""
+
         for plain_words, rec_word in mapping:
             if self.is_ordinal(plain_words[-1]):
                 ordinal_word = self.format_ordinal(rec_word[0])
