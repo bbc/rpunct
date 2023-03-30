@@ -226,7 +226,7 @@ class RPunctRecoverer:
 
                     # Find the final word of the contraction in the orginal segments list
                     end_item = original_segment[index_orig + no_skip_words]
-                    original_contents = original_segment[index_orig : index_orig + no_skip_words]
+                    original_contents = original_segment[index_orig : index_orig + no_skip_words + 1]
 
                     # Increment original segments list to jump to the end of the contracted word
                     index_orig += no_skip_words
