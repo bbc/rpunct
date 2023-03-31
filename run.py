@@ -94,6 +94,15 @@ composite_data_subparser.add_argument(
 
 # Model training stage arguments
 train_parser.add_argument(
+    '-m',
+    '--model',
+    metavar='MODEL',
+    type=str,
+    default=None,
+    help="If wishing to fine-tune an existing model, specify the (path to the) model directory to initiate training from."
+)
+
+train_parser.add_argument(
     '-d',
     '--data',
     metavar='DATA',
@@ -311,6 +320,7 @@ if __name__ == "__main__":
         # Training stage
         if args.stage == 'train':
             e2e_train(
+                model_source=args.model,
                 data_source=args.data,
                 epochs=args.epochs,
                 use_cuda=args.gpu,

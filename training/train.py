@@ -24,7 +24,7 @@ def e2e_train(
     for the punctuation recovery task.
 
     Args:
-        - model_source (str): the name of the directory within `rpunct/outputs/` to load a pre-trained RPunct model from (or create a new model if None).
+        - model_source (str): the name of the directory (from the root of rpunct) to load a pre-trained RPunct model from (or create a new model if None).
         - data_source (str): the name of the directory within `rpunct/training/datasets/` containing the prepared training data.
         - epochs (int): the number of training epochs to execute.
         - use_cuda (bool): run training on GPU (True) or CPU (False).
@@ -56,20 +56,19 @@ def e2e_train(
         )
     else:
         print("\t* Loading RPunct model")
-        model_location = os.path.join('outputs', model_source)
 
-        if os.path.isdir(model_location):
+        if os.path.isdir(model_source):
             model = NERModel(
                 "bert",
-                model_location,
+                model_source,
                 use_cuda=use_cuda,
                 args={
                     "num_train_epochs": epochs
                 }
             )
-            print(f"\t* Pre-trained model found at: {model_location}", end='\n\n')
+            print(f"\t* Pre-trained model found at: {model_source}", end='\n\n')
         else:
-            raise FileNotFoundError(f"Pre-trained model files could not be found at the path: {model_location}")
+            raise FileNotFoundError(f"Pre-trained model files could not be found at the path: {model_source}")
 
     # Train the model
     train_data_path = os.path.join(PATH, data_source, 'rpunct_train_set.txt')
