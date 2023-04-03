@@ -18,3 +18,4 @@ provision_linguine.sh
 .DS_Store
 label-distributions/
 rpunct/itemising.py
+test_run_rpunct.py

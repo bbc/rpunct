@@ -91,11 +91,11 @@ class NumberRecoverer:
 
             if stripped_word:
                 # Restore currency words to their symbols
-                if self.correct_currencies and self.is_currency_symbol(stripped_word):
+                if self.correct_currencies and self._is_currency_symbol(stripped_word):
                         output_text = self.insert_currency_symbols(output_text, word)
 
                 # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
-                elif self.correct_bbc_style_numbers and self.is_stylable_number(word):
+                elif self.correct_bbc_style_numbers and self._is_stylable_number(word) and parsed_list[i - 1] != 'radio':
                         output_text = self.bbc_style_numbers(output_text, word)
 
                 # Format numbers with many digits to include comma separators
@@ -103,7 +103,7 @@ class NumberRecoverer:
                     output_text += self.insert_comma_seperators(word)
 
                 # Replace colloquial decades terms with digits
-                elif self.is_date_decade(stripped_word) and parsed_list[i - 1].isnumeric():
+                elif self._is_date_decade(stripped_word) and parsed_list[i - 1].isnumeric():
                     output_text = self.decades_to_digits(output_text, stripped_word)
 
                 else:
@@ -150,23 +150,23 @@ class NumberRecoverer:
         return parsed
 
     @staticmethod
-    def is_currency_symbol(word):
+    def _is_currency_symbol(word):
         """Checks if a word is a currency term."""
         return (word in CURRENCIES.keys()) or (word[-1] == 's' and word[:-1] in CURRENCIES.keys())
 
     @staticmethod
-    def is_stylable_number(number):
+    def _is_stylable_number(number):
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
         # (Includes failsafe if number is immediately followed by a punctuation character)
         return (number.isnumeric() and int(number) < 10) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10)
 
     @staticmethod
-    def is_date_decade(word):
+    def _is_date_decade(word):
         """Checks if a word is a natural language date term specifying a decade (e.g. nineties)"""
         return word in DECADES.keys()
 
     @staticmethod
-    def is_ordinal(text):
+    def _is_ordinal(text):
         """Checks if a natural language number is an ordinal"""
         return text.capitalize() in ORDINALS
 
@@ -368,7 +368,7 @@ class NumberRecoverer:
         formatted_output = ""
 
         for plain_words, rec_word in mapping:
-            if self.is_ordinal(plain_words[-1]):
+            if self._is_ordinal(plain_words[-1]):
                 ordinal_word = self.format_ordinal(rec_word[0])
                 formatted_output += ordinal_word + " "
             else:

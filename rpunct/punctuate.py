@@ -10,8 +10,8 @@ import json
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
-# PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
-PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
+PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
+# PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
 CAPI_LABELS = ['O', 'C', 'U', 'M']
 VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 TERMINALS = ['.', '!', '?']
@@ -59,18 +59,20 @@ class RestorePuncts:
 
         return punct_text
 
-    def predict(self, input_segments:str, silent:bool=True):
+    def predict(self, input_segments, silent:bool=True):
         """
         Passes the unpunctuated text to the model for punctuation.
         """
+        predictions = []
+
         if silent:
-            predictions = [self.model.predict([i['text']])[0][0] for i in input_segments]
+            I = input_segments
         else:
-            predictions = []
-            with tqdm(input_segments) as I:
-                I.set_description("Punctuating text segments")
-                for i in I:
-                    predictions.append(self.model.predict([i['text']])[0][0])
+            I = tqdm(input_segments)
+            I.set_description("Punctuating text segments")
+
+        for i in I:
+            predictions.append(self.model.predict([i['text']])[0][0])
 
         return predictions
 
