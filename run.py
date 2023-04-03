@@ -39,7 +39,7 @@ data_parser.add_argument(
     '--print_stats',
     action='store_true',
     default=False,
-    help="Print label distribution statistics about the test dataset - default hides stats."
+    help="Print label distribution statistics about the train/test dataset - default hides stats."
 )
 
 news_data_subparser.add_argument(
