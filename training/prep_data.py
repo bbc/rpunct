@@ -13,12 +13,9 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from training.get_data import *
+from rpunct.punctuate import VALID_LABELS, PUNCT_LABELS
 
-PATH = './training/datasets/'
 WORDS_PER_FILE = 35000000
-PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
-CAPI_LABELS = ['O', 'C', 'U', 'M']
-VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 
 
 def e2e_data(data_type='news-transcripts', tt_split='90:10',
@@ -154,7 +151,7 @@ def create_rpunct_dataset(directory, data_type, train_or_test='train', make_mc_d
     # Constuct list of text words and labels (punctuation tag per word) over the dataset
     all_records = []
     with tqdm(data_split['text']) as T:
-        T.set_description(f"{' ' * 7} * Labelling {train_or_test}ing instances ")
+        T.set_description(f"{' ' * 7} * Labelling {train_or_test}ing instances {' ' if train_or_test == 'test' else ''}")
         for segment in T:
             # Create a list enumerating each word in an input segment of text and its label: [...{id, word, label}...]
             record, mixed_case_instances = create_record(segment, mixed_casing=make_mc_database)
@@ -192,7 +189,7 @@ def create_record(text, mixed_casing=False):
     # Remove punctuation of each word, and label it with a tag representing what punctuation it did have
     for obs in observation:
         # Convert word to plaintext
-        stripped_obs = re.sub(r"[^0-9a-zA-Z']", "", obs)
+        stripped_obs = re.sub(r"[^0-9a-zA-Z]", "", obs)
 
         if stripped_obs.endswith("'"):  # Remove any remaining trailing apostrophes (only leave mid-word apostrophes)
             stripped_obs = stripped_obs[:-1]
@@ -201,7 +198,7 @@ def create_record(text, mixed_casing=False):
             continue
 
         # Collect trailing punctuation for this word's label
-        if not obs[-1].isalnum():
+        if not obs[-1].isalnum() and obs[-1] in PUNCT_LABELS:
             new_lab = obs[-1]
         else:
             new_lab = "O"  # `O` => no punctuation
@@ -224,11 +221,12 @@ def create_record(text, mixed_casing=False):
                 if not stripped_obs[-1].isalnum():
                     stripped_obs = stripped_obs[:-1]
 
-                if stripped_obs[-2:] != "'s" and stripped_obs[-1:] != 's' and stripped_obs.lower() not in mixed_case.keys():
+                if stripped_obs[-1:] != 's' and stripped_obs.lower() not in mixed_case.keys():
                     mixed_case.update({stripped_obs.lower(): stripped_obs})
 
         # Add the word and its label to the dataset
-        new_obs.append({'sentence_id': 0, 'words': stripped_obs.lower(), 'labels': new_lab})
+        # N.B. apostrophes (') and percentages (%) are preserved in the dataset
+        new_obs.append({'sentence_id': 0, 'words': re.sub(r"[^0-9a-zA-Z'%]", "", obs).lower(), 'labels': new_lab})
 
     return new_obs, mixed_case
 
@@ -252,8 +250,8 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
     random.seed(42)
     _round = 0
 
-    print("\n\t* Segmenting data into chunks:")
-    print(f"\t\t- No. words in {train_or_test} set : {num_words}")
+    print(f"\t* Segmenting data into chunks  :")
+    print(f"\t\t- No. words in {train_or_test} set {' ' if train_or_test == 'test' else ''}: {num_words}")
 
     # Segment dataset into `num_splits` chunks
     while _round < num_splits:
@@ -267,7 +265,7 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
         # Cycle through the start/end chunk index tuples forming data blocks of uniform dimensions
         observations = np.empty(shape=(len(splits), 500, 3), dtype=object)
 
-        with tqdm(range(len(splits))) as S:
+        with tqdm(range(len((splits)))) as S:
             S.set_description(f"{' ' * 15} - Splitting data chunk {_round + 1} ")
             for j in S:
                 a, b = splits[j][0], splits[j][1]
@@ -287,7 +285,7 @@ def create_training_samples(words_and_labels, data_type, file_out_path=PATH, tra
         with open(out_path, 'wb') as f:
             np.save(f, observations, allow_pickle=True)
 
-        print(f"\t\t- Outputting data file {_round + 1} : {out_path}")
+        print(f"\t\t- Outputting data file {_round} : {out_path}")
         del records
         del observations
 
@@ -331,7 +329,7 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
     Prepares data from original text into Connnl formatted datasets ready for training.
     In addition constraints label space to only labels we care about.
     """
-    print("\n\t* Finalising output dataset:")
+    print("\t* Finalising output dataset    :")
 
     # Create output dataset paths
     output_txt = f'rpunct_{train_or_test}_set.txt'
@@ -359,7 +357,7 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
     else:
         train_set = token_data
 
-    print(f"\t\t- {train_or_test.replace('_', ' ').capitalize()}ing dataset shape {' ' * 7} : ({len(train_set)}, {len(train_set[0])}, {len(train_set[0][0])})")
+    print(f"\t\t- {train_or_test.capitalize()}ing dataset shape {' ' * 7 if train_or_test == 'train' else ' ' * 8} : ({len(train_set)}, {len(train_set[0])}, {len(train_set[0][0])})")
 
     # Format training set as Connl NER txt file
     create_text_file(train_set, dataset_path)

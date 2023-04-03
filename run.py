@@ -39,7 +39,7 @@ data_parser.add_argument(
     '--print_stats',
     action='store_true',
     default=False,
-    help="Print label distribution statistics about the test dataset - default hides stats."
+    help="Print label distribution statistics about the train/test dataset - default hides stats."
 )
 
 news_data_subparser.add_argument(
@@ -93,6 +93,15 @@ composite_data_subparser.add_argument(
 
 
 # Model training stage arguments
+train_parser.add_argument(
+    '-m',
+    '--model',
+    metavar='MODEL',
+    type=str,
+    default=None,
+    help="If wishing to fine-tune an existing model, specify the (path to the) model directory to initiate training from."
+)
+
 train_parser.add_argument(
     '-d',
     '--data',
@@ -214,6 +223,14 @@ punct_parser.add_argument(
     help="Toggle between training on a GPU or on the CPU - default is CPU."
 )
 
+punct_parser.add_argument(
+    '-w',
+    '--wer',
+    action='store_true',
+    default=False,
+    help="Toggle on calculating the word error rate of the restored transcript compared to the input truth file (input file must be a correctly punctuated test file)."
+)
+
 
 # Logic to parse input arguments from command line and execute the RPunct stage (data/train/test/inference)
 if __name__ == "__main__":
@@ -229,7 +246,8 @@ if __name__ == "__main__":
             model_location=args.model,
             input_txt=args.input,
             output_txt=args.output,
-            use_cuda=args.gpu
+            use_cuda=args.gpu,
+            wer=args.wer
         )
 
     # Data preparation stage
@@ -302,6 +320,7 @@ if __name__ == "__main__":
         # Training stage
         if args.stage == 'train':
             e2e_train(
+                model_source=args.model,
                 data_source=args.data,
                 epochs=args.epochs,
                 use_cuda=args.gpu,

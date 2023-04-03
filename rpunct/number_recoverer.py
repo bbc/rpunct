@@ -6,20 +6,49 @@ Module supporting punctuation recovery and post-processing of raw STT output.
 import re
 import string
 from num2words import num2words
-from number_parser import parse as number_parser
+from number_parser import parse as number_parser, parse_number as individual_number_parser
 
 try:
-    from rpunct.punctuate import TERMINALS
+    from rpunct.utils import *
 except ModuleNotFoundError:
-    from punctuate import TERMINALS
+    from utils import *
 
+TERMINALS = ['.', '!', '?']
 
-STRING_NUMBERS = ['million', 'billion', 'trillion']
-currencies = {
+STRING_NUMBERS = {
+    'million': 'm',
+    'billion': 'bn',
+    'trillion': 'tn'
+}
+
+CURRENCIES = {
     'pound': '£',
     'euro': '€',
-    'dollar': '$'
+    'dollar': '$',
+    'yen': '¥'
 }
+
+DECADES = {
+    'hundreds': '00s',
+    'tens': '10s',
+    'twenties': '20s',
+    'thirties': '30s',
+    'fourties': '40s',
+    'fifties': '50s',
+    'sixties': '60s',
+    'seventies': '70s',
+    'eighties': '80s',
+    'nineties': '90s'
+}
+
+ORDINALS = [
+    "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
+    "Eighth", "Ninth", "Tenth", "Eleventh", "Twelfth", "Thirteenth",
+    "Fourteenth", "Fifteenth", "Sixteenth", "Seventeenth", "Eighteenth",
+    "Nineteenth", "Twentieth", "Thirtieth", "Fortieth", "Fiftieth",
+    "Sixtieth", "Seventieth", "Eightieth", "Ninetieth", "Hundredth",
+    "Thousandth", "Millionth", "Billionth"
+]
 
 
 class NumberRecoverer:
@@ -28,26 +57,27 @@ class NumberRecoverer:
     to convert numbers written in the natural language to their equivalent numeric forms.
     """
 
-    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True, restore_decimals=True):
+    def __init__(self, correct_currencies=True, correct_bbc_style_numbers=True, comma_separators=True, restore_decimals=True, restore_percentages=True):
         self.correct_currencies = correct_currencies
         self.correct_bbc_style_numbers = correct_bbc_style_numbers
         self.comma_separators = comma_separators
         self.restore_decimals = restore_decimals
+        self.restore_percentages = restore_percentages
 
-    def process(self, text):
+    def process(self, input_text:str):
         """
         Pipeline for recovering formatting of numbers within a piece of text.
         """
         # Convert numerical strings to digits in text using `number_parser` package
-        parsed_text = self.number_parser(text)
+        parsed_text = self.number_parser(input_text)
+
+        # Initial currency restoration: 'X pence' -> 'Xp'
+        if self.correct_currencies:
+            parsed_text = self.convert_pence_to_p(parsed_text)
 
         # Convert percentages to use the symbol notation
-        parsed_text = parsed_text.replace(" percent", "%")
-
-        # If we are correcting currencies, we don't want these words to be hidden mid-hyphenation
-        if self.correct_currencies:
-            for word in currencies.keys():
-                parsed_text = parsed_text.replace(f"-{word}", f" {word}")
+        if self.restore_percentages:
+            parsed_text = self.insert_percentage_symbols(parsed_text)
 
         # Restore decimal points
         parsed_list = parsed_text.split(" ")
@@ -56,28 +86,37 @@ class NumberRecoverer:
 
         # Correct currencies, BBC styling of numbers, and insert currency separators into numbers >= 10,000
         output_text = ""
-        for word in parsed_list:
+        for i, word in enumerate(parsed_list):
             stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower()
 
-            # Restore currency words to their symbols
-            if self.correct_currencies and self.is_currency(stripped_word):
-                    output_text = self.insert_currency_symbols(output_text, word)
+            if stripped_word:
+                # Restore currency words to their symbols
+                if self.correct_currencies and self.is_currency_symbol(stripped_word):
+                        output_text = self.insert_currency_symbols(output_text, word)
 
-            # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
-            elif self.correct_bbc_style_numbers and self.is_stylable_number(word):
-                    output_text = self.bbc_style_numbers(output_text, word)
+                # BBC Style Guide asserts that single digit numbers should be written as words, so revert those numbers
+                elif self.correct_bbc_style_numbers and self.is_stylable_number(word):
+                        output_text = self.bbc_style_numbers(output_text, word)
 
-            # Format numbers with many digits to include comma separators
-            elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
-                output_text += self.insert_comma_seperators(word) + " "
+                # Format numbers with many digits to include comma separators
+                elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
+                    output_text += self.insert_comma_seperators(word)
 
-            else:
-                output_text += word + " "
+                # Replace colloquial decades terms with digits
+                elif self.is_date_decade(stripped_word) and parsed_list[i - 1].isnumeric():
+                    output_text = self.decades_to_digits(output_text, stripped_word)
+
+                else:
+                    output_text += word + " "
+
+        # Restore/format ordinal numbers
+        output_text = self.recover_ordinals(input_text, output_text)
 
         # Remove any unwanted whitespace
         output_text = output_text.strip()
         output_text = output_text.replace(" - ", "-")
         output_text = output_text.replace("- ", "-")
+        output_text = re.sub(r'([0-9]*)-([0-9]*)', r'\1\2', output_text)  # remove unwanted segmenting of numbers
 
         return output_text
 
@@ -90,7 +129,7 @@ class NumberRecoverer:
         # also ensure large number definitions remain as words in text
         if self.bbc_style_numbers:
             # Swap digits that we don't want to be parsed with control characters (from STRING_NUMBERS lookup table)
-            control_chars = list(enumerate(STRING_NUMBERS))
+            control_chars = list(enumerate(STRING_NUMBERS.keys()))
             for index, number in control_chars:
                 text = text.replace(number, f"\\{index}")
 
@@ -110,14 +149,26 @@ class NumberRecoverer:
 
         return parsed
 
-    def is_currency(self, word):
+    @staticmethod
+    def is_currency_symbol(word):
         """Checks if a word is a currency term."""
-        return (word in currencies.keys()) or (word[-1] == 's' and word[:-1] in currencies.keys())
+        return (word in CURRENCIES.keys()) or (word[-1] == 's' and word[:-1] in CURRENCIES.keys())
 
-    def is_stylable_number(self, number):
+    @staticmethod
+    def is_stylable_number(number):
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
         # (Includes failsafe if number is immediately followed by a punctuation character)
         return (number.isnumeric() and int(number) < 10) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10)
+
+    @staticmethod
+    def is_date_decade(word):
+        """Checks if a word is a natural language date term specifying a decade (e.g. nineties)"""
+        return word in DECADES.keys()
+
+    @staticmethod
+    def is_ordinal(text):
+        """Checks if a natural language number is an ordinal"""
+        return text.capitalize() in ORDINALS
 
     @staticmethod
     def replace_decimal_points(text_list):
@@ -134,7 +185,7 @@ class NumberRecoverer:
             if re.sub(r"[^0-9a-zA-Z]", "", word) == "point" and i > 0 and i < len(text_list) - 1:
                 # When a case for decimal point formatting is identified, combine stripped full no. and decimal digits together around a `.` char
                 pre_word = text_list[i - 1]
-                pre_word_stripped = re.sub(",.?!%", "", pre_word)
+                pre_word_stripped = re.sub(r"[,.?!%]", "", pre_word)
                 post_word = text_list[i + 1]
                 post_word_stripped = re.sub(r"[^0-9a-zA-Z]", "", post_word)
 
@@ -156,12 +207,14 @@ class NumberRecoverer:
 
         return corrected_list
 
-    def insert_currency_symbols(self, text, currency):
+    @staticmethod
+    def insert_currency_symbols(text, currency):
         """
         Converts currency terms in text to symbols before their respective numerical values.
         """
         # Get plaintext version of currency keyword
         stripped_currency = re.sub(r"[^0-9a-zA-Z]", "", currency).lower()
+
         if stripped_currency[-1] == 's':
             stripped_currency = stripped_currency[:-1]
 
@@ -170,15 +223,19 @@ class NumberRecoverer:
 
         # Scan through lookback window to find the number to which the currency symbol punctuates
         text_list = text.split(" ")
+        quantifying_tag = ""
+
         while lookback < 5:
             prev_word = text_list[-lookback]
             prev_word_stripped = re.sub(r"[^0-9a-zA-Z]", "", prev_word)
 
             # When a numeric word is found, reconstruct the output text around this (i.e. previous_text + currency_symbol + number + trailing_text)
             if prev_word_stripped.isnumeric():
-                new_output_text = text_list[:-lookback]  # previous text before currency symbol
-                new_output_text.append(currencies.get(stripped_currency) + prev_word)  # currency symbol and number
-                new_output_text.extend(text_list[-lookback + 1:])  # trailing text after currency symbol/number
+                new_output_text = text_list[:-lookback]  # previous text before currency number
+
+                new_output_text.append(CURRENCIES.get(stripped_currency) + prev_word +  quantifying_tag)  # currency symbol and number (including any large denominators - e.g. million -> m)
+
+                new_output_text.extend([word for word in text_list[-lookback + 1:] if word not in STRING_NUMBERS.keys()])  # trailing text after currency symbol/number
                 text = " ".join(new_output_text)
 
                 # Add back in any punctuation trailing the original currency keyword
@@ -187,6 +244,12 @@ class NumberRecoverer:
 
                 found = True
                 break
+
+            # convert big number words (e.g. million) to condensed versions (e.g. mn)
+            elif prev_word_stripped in STRING_NUMBERS.keys():
+                quantifying_tag = STRING_NUMBERS[prev_word_stripped] + quantifying_tag
+                lookback += 1
+
             else:
                 lookback += 1
 
@@ -196,13 +259,33 @@ class NumberRecoverer:
 
         return text
 
-    def bbc_style_numbers(self, text, number):
+    @staticmethod
+    def convert_pence_to_p(text):
+        """
+        Converts the natural language term 'pence' in text to the symbol 'p' following a monetary value.
+        """
+        text = re.sub(r'([0-9]+) pence', r'\1p', text)
+
+        return text
+
+
+    @staticmethod
+    def insert_percentage_symbols(text):
+        """
+        Converts the natural language term 'percent' in text to the symbol '%' if following a digit.
+        """
+        text = re.sub(r'([0-9]+[0-9.]*) percent', r'\1%', text)
+
+        return text
+
+    @staticmethod
+    def bbc_style_numbers(text, number):
         """
         Converts small numbers back from digits to words (according to BBC Style Guide rules).
         """
         if not number[-1].isnumeric():
             # Don't convert number if it is involved with some mathematical/currency expression
-            if number[-1] in ['%', '*', '+', '<', '>', '$', '£', '€']:
+            if number[-1] in ['%', 'p']:
                 text += number + " "
                 return text
             # But separate off any trailing punctuation other than this and continue
@@ -223,7 +306,8 @@ class NumberRecoverer:
 
         return text
 
-    def insert_comma_seperators(self, number):
+    @staticmethod
+    def insert_comma_seperators(number):
         """
         Inserts comma separators into numbers with many digits to break up 1000s (e.g. '100000' -> '100,000').
         """
@@ -245,6 +329,49 @@ class NumberRecoverer:
             number = number[:i] + "," + number[i:]
 
         # Reconcatenate leading/trailing chars/digits
-        number = start_char + number + end_chars
+        number = start_char + number + end_chars + " "
 
         return number
+
+    @staticmethod
+    def decades_to_digits(text, decade):
+        if text.endswith(" "):
+            text = text[:-1]
+
+        output_text_list = text.split(" ")
+        output = " ".join(output_text_list[:-1]) + " " + output_text_list[-1][:2] + DECADES[decade] + " "
+
+        return output
+
+    @staticmethod
+    def format_ordinal(number):
+        if number.isnumeric():
+            number = int(number)
+        else:
+            number = individual_number_parser(number)
+
+        if number < 10:
+            ordinal_word = num2words(number, to='ordinal')
+        else:
+            ordinal_function = lambda n: "%s%s" % ("{:,}".format(n),"tsnrhtdd"[(n//10%10 != 1) * (n%10 < 4) * n%10::4])
+            ordinal_word = ordinal_function(number)
+
+        return ordinal_word
+
+    def recover_ordinals(self, plain, recovered):
+        # Align number recovered text with original s.t. we can find where ordinals have been lost
+        plain = plain.split(" ")
+        stripped_recovered = [item.replace("-", " ") for item in recovered.split(" ")]
+        stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
+
+        mapping = align_texts(plain, stripped_recovered)
+        formatted_output = ""
+
+        for plain_words, rec_word in mapping:
+            if self.is_ordinal(plain_words[-1]):
+                ordinal_word = self.format_ordinal(rec_word[0])
+                formatted_output += ordinal_word + " "
+            else:
+                formatted_output += rec_word[0] + " "
+
+        return formatted_output

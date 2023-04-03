@@ -4,11 +4,14 @@
 __author__ = "Daulet N."
 __email__ = "daulet.nurmanbetov@gmail.com"
 
+import re
 import os
 import json
+from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
-PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
+# PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
+PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
 CAPI_LABELS = ['O', 'C', 'U', 'M']
 VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 TERMINALS = ['.', '!', '?']
@@ -50,17 +53,24 @@ class RestorePuncts:
         """
         # Restoration pipeline
         segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
-        preds_lst = [self.predict(i['text']) for i in segments]  # Generate word-level punctuation predictions
+        preds_lst = self.predict(segments)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
         punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def predict(self, input_slice:str):
+    def predict(self, input_segments:str, silent:bool=True):
         """
         Passes the unpunctuated text to the model for punctuation.
         """
-        predictions = self.model.predict([input_slice])[0][0]
+        if silent:
+            predictions = [self.model.predict([i['text']])[0][0] for i in input_segments]
+        else:
+            predictions = []
+            with tqdm(input_segments) as I:
+                I.set_description("Punctuating text segments")
+                for i in I:
+                    predictions.append(self.model.predict([i['text']])[0][0])
 
         return predictions
 
@@ -161,7 +171,10 @@ class RestorePuncts:
             word, label = i
 
             # Implement capitalisation (lowercase/capitalised/uppercase/mixed-case)
-            if label[-1] == "U":  # `xU` => uppercase
+            if re.sub(r'[^£$€]', '', word) or label[-1] == "O":  # `xO` => lowercase & don't capitalise if part of a currency
+                punct_wrd = word
+
+            elif label[-1] == "U":  # `xU` => uppercase
                 punct_wrd = word.upper()
 
                 if len(word) > 2 and word[-2:] == "'S":
@@ -179,15 +192,15 @@ class RestorePuncts:
                 else:
                     punct_wrd = self.fetch_mixed_casing(word)  # general mixed-case
 
-            else:  # `xO` => lowercase
-                punct_wrd = word
+            else:
+                raise ValueError(f"Invalid capitalisation label: '{label[-1]}'")
 
-                # Ensure terminals are followed by capitals
-                if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
-                    punct_wrd = punct_wrd.capitalize()
+            # Ensure terminals are followed by capitals
+            if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
+                punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
-            if label[0] != "O":
+            if label[0] != "O" and label[0] in PUNCT_LABELS and punct_wrd[-1] not in PUNCT_LABELS:
                 punct_wrd += label[0]
 
             punct_resp += punct_wrd + " "
@@ -196,6 +209,9 @@ class RestorePuncts:
         punct_resp = punct_resp.strip()
         punct_resp = punct_resp.replace("- ", "-")
         punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
+
+        # remove unwanted segmenting of numbers
+        punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
         # Ensure text ends with a terminal
         if punct_resp[-1].isalnum():
@@ -236,7 +252,7 @@ class RestorePuncts:
         return correct_capitalisation
 
 
-def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False, ):
+def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False):
     """
     Pipeline that forms an RestorePuncts object to conduct punctuation restoration over an input file of plaintext using the specified RPunct model.
     """
