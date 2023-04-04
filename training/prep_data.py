@@ -416,7 +416,7 @@ def load_datasets(data_dir='reviews', train_or_test='train'):
     return token_data
 
 
-def clean_up_labels(dataset, valid_labels=VALID_LABELS):
+def clean_up_labels(dataset):
     """
     Given a list of valid labels cleans up the dataset
     by limiting to only the labels available.
@@ -426,7 +426,7 @@ def clean_up_labels(dataset, valid_labels=VALID_LABELS):
     for ix, i in enumerate(dataset):
         for tok in i:
             tok[0] = ix
-            if tok[2] not in valid_labels:
+            if tok[2] not in VALID_LABELS:
                 case = tok[2][-1]
                 tok[2] = f"O{case}"
                 if len(tok[2]) < 2:

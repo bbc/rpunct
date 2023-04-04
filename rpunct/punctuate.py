@@ -10,12 +10,12 @@ import json
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
+# VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
 PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
 # PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
 CAPI_LABELS = ['O', 'C', 'U', 'M']
 VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 TERMINALS = ['.', '!', '?']
-# VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
 
 
 class RestorePuncts:
@@ -166,6 +166,7 @@ class RestorePuncts:
         """
         Given a list of predictions from the model, applies the predictions to the plaintext, restoring full punctuation and capitalisation.
         """
+        valid_punctuation = [p for p in PUNCT_LABELS if p not in ["O", "'"]]
         punct_resp = ""
 
         # Cycle through the list containing each word and its predicted label
@@ -202,7 +203,7 @@ class RestorePuncts:
                 punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
-            if label[0] != "O" and label[0] in PUNCT_LABELS and punct_wrd[-1] not in PUNCT_LABELS:
+            if label[0] != "O" and punct_wrd[-1] not in valid_punctuation:
                 punct_wrd += label[0]
 
             punct_resp += punct_wrd + " "
@@ -256,7 +257,7 @@ class RestorePuncts:
 
 def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False):
     """
-    Pipeline that forms an RestorePuncts object to conduct punctuation restoration over an input file of plaintext using the specified RPunct model.
+    Pipeline that constructs an RPunct model to conduct punctuation restoration over an input file of plaintext.
     """
     # Generate an RPunct model instance
     punct_model = RestorePuncts(model_source=model_location, use_cuda=use_cuda)

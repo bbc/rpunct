@@ -99,7 +99,7 @@ class NumberRecoverer:
                         output_text = self.bbc_style_numbers(output_text, word)
 
                 # Format numbers with many digits to include comma separators
-                elif self.comma_separators and stripped_word.isnumeric() and int(stripped_word) >= 10000:
+                elif self.comma_separators and re.sub(r"[^0-9]", "", word) and int(stripped_word) >= 10000:
                     output_text += self.insert_comma_seperators(word)
 
                 # Replace colloquial decades terms with digits
@@ -116,7 +116,7 @@ class NumberRecoverer:
         output_text = output_text.strip()
         output_text = output_text.replace(" - ", "-")
         output_text = output_text.replace("- ", "-")
-        output_text = re.sub(r'([0-9]*)-([0-9]*)', r'\1\2', output_text)  # remove unwanted segmenting of numbers
+        output_text = re.sub(r'([0-9]+)[\-:]([0-9]+)', r'\1\2', output_text)  # remove unwanted segmenting of numbers
 
         return output_text
 
@@ -321,6 +321,10 @@ class NumberRecoverer:
         if "." in number:
             number, end_chars = number.split(".")
             end_chars = "." + end_chars
+        elif number[-1] == 'm':
+            number, end_chars = number[:-1], 'm'
+        elif number[-2:] == 'bn' or number[-2:] == 'bn':
+            number, end_chars = number[:-2], number[-2:]
         else:
             end_chars = ""
 
@@ -361,10 +365,9 @@ class NumberRecoverer:
     def recover_ordinals(self, plain, recovered):
         # Align number recovered text with original s.t. we can find where ordinals have been lost
         plain = plain.split(" ")
-        stripped_recovered = [item.replace("-", " ") for item in recovered.split(" ")]
-        stripped_recovered = " ".join(stripped_recovered).strip().split(" ")
+        recovered = recovered.split(" ")
 
-        mapping = align_texts(plain, stripped_recovered)
+        mapping = align_texts(plain, recovered, strip_punct=False)
         formatted_output = ""
 
         for plain_words, rec_word in mapping:

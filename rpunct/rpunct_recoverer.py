@@ -13,12 +13,12 @@ from jiwer import wer
 from num2words import num2words
 
 try:
-    from rpunct.punctuate import RestorePuncts
-    from rpunct.number_recoverer import NumberRecoverer
+    from rpunct.punctuate import *
+    from rpunct.number_recoverer import *
     from rpunct.utils import *
 except ModuleNotFoundError:
-    from punctuate import RestorePuncts
-    from number_recoverer import NumberRecoverer
+    from punctuate import *
+    from number_recoverer import *
     from utils import *
 
 
@@ -33,15 +33,15 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
-    def process(self, input_transcript, conduct_number_recovery:bool=True, input_type:str='str'):
+    def process(self, input_transcript, conduct_number_recovery:bool=True, input_type:str='str', strip_existing_punct:bool=True):
         """
         Format input transcripts depending on their structure (segmented or pure plaintext)
         and pass them to RPunct to have punctuation/capitalisation/numbers recovered
         Then reconstructs the punctuated output in the same format as the input.
 
         Args:
-            input_transcript: a list of Item objects (of STT plaintext) or a single string of plaintext.
-            input_type: specify which one of these above inputs is the case (segmented Items or a text string(s))
+            input_transcript: a piece of plaintext to be punctuated - e.g a string, list of strings, or list of Item objects.
+            input_type: specify which one of these above inputs is the case - `str`: (segmented) text string(s) or `items`: segmented Item objects.
             conduct_number_recovery: toggle the number recoverer.
 
         Returns:
@@ -49,17 +49,17 @@ class RPunctRecoverer:
             or a string of punctated text (depends on input type).
         """
         if type(input_transcript) == str:
-            output = self.process_string(input_transcript, conduct_number_recovery)
+            output = self.process_string(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
         elif type(input_transcript) == list and len(input_transcript) > 0 and type(input_transcript[0]) == str:
-            output = self.process_string_segments(input_transcript, conduct_number_recovery)
+            output = self.process_string_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
         elif input_type.startswith('item') and len(input_transcript) > 0 and type(input_transcript) == list:
-            output = self.process_items(input_transcript, conduct_number_recovery)
+            output = self.process_items(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
         else:
             raise TypeError("Input transcript to recoverer is not in a supported format/type (must be 'str' or 'Items')")
 
         return output
 
-    def process_string(self, transcript:str, num_rec:bool=True):
+    def process_string(self, transcript:str, num_rec:bool=True, strip_existing_punct:bool=True):
         """
         Punctuation/number recovery pipeline for string inputs.
 
@@ -67,20 +67,20 @@ class RPunctRecoverer:
             transcript: Single string transcript to conduct punctuation/number recovery on.
         """
         # Conduct number recovery process on segment transcript via NumberRecoverer
-        transcript = self.strip_punctuation(transcript)
+        if strip_existing_punct:
+            transcript = self.strip_punctuation(transcript)
+            # print('\nPlaintext: \n', transcript)
 
-        # print('\nPlaintext: \n', transcript)
         if num_rec:
             transcript = self.number_recoverer.process(transcript)
-            # print('\nNumber recovered: \n', recovered)
+            # print('\nNumber recovered: \n', transcript)
 
-        # Process entire transcript, then retroactively apply punctuation to words in segments
         recovered = self.recoverer.punctuate(transcript)
         # print('\nPunctuation recovered: \n', transcript)
 
         return recovered
 
-    def process_string_segments(self, input_segments:list, num_rec:bool=True):
+    def process_string_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True):
         """
         Punctuation/number recovery pipeline for (list of) segmented string inputs.
 
@@ -93,20 +93,21 @@ class RPunctRecoverer:
             T.set_description("Restoring transcript punctuation")
             for transcript in T:
                 # Conduct punctuation recovery process on segment transcript via RPunct
-                punctuated = self.process_string(transcript, num_rec=num_rec)  # Restore punctuation to plaintext segment using RPunct
+                punctuated = self.process_string(transcript, num_rec=num_rec, strip_existing_punct=strip_existing_punct)  # Restore punctuation to plaintext segment using RPunct
 
                 # Format recovered transcript back into list of segments
                 recovered_segments.append(punctuated)
 
         return recovered_segments
 
-    def process_file(self, input_path, output_file_path=None, compute_wer=False, num_rec:bool=True):
+    def process_file(self, input_path, output_file_path=None, compute_wer=False, num_rec:bool=True, strip_existing_punct:bool=True):
         # Read input text
         print(f"\nReading input text from file: {input_path}")
         with open(input_path, 'r') as fp:
             input_text = fp.read()
 
-        punctuated = self.process_string(input_text, num_rec=num_rec)  # Restore punctuation to plaintext using RPunct
+        # Restore punctuation to plaintext using RPunct
+        punctuated = self.process_string(input_text, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
 
         self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
 
@@ -116,7 +117,7 @@ class RPunctRecoverer:
 
         return punctuated
 
-    def process_items(self, input_segments:list, num_rec:bool=False):
+    def process_items(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True):
         """
         Punctuation/number recovery pipeline for (list of) segmented Item inputs.
         """
@@ -127,9 +128,10 @@ class RPunctRecoverer:
         with tqdm(transcript_segments) as T:
             T.set_description("Restoring transcript punctuation")
             for segment in T:
-                # Conduct punctuation recovery process on segment transcript via RPunct
                 transcript = ' '.join(segment).strip()
-                transcript = self.strip_punctuation(transcript)
+
+                if strip_existing_punct:
+                    transcript = self.strip_punctuation(transcript)
 
                 # Conduct number recovery process on segment transcript via NumberRecoverer
                 if num_rec:
@@ -149,31 +151,46 @@ class RPunctRecoverer:
 
         return output_segments
 
-    def strip_punctuation(self, truth_text):
+    def strip_punctuation(self, punctuated_text):
         """
-        Converts a string of truth text to plaintext of the same format as STT transcripts.
+        Converts a string of punctuated text to plaintext with no punctuation or capitalisation and only natural language numbers.
         """
         # set lowercase and replace certain characters
-        text = truth_text.lower()
+        text = punctuated_text.lower()
         text = text.replace("\n", " ")
         text = text.replace(" - ", " ")
         text = text.replace("-", " ")
         text = text.replace("%", " percent")
-        text = re.sub(r"[^0-9a-zA-Z' ]", "", text)
         text = text.strip()
 
-        # convert to list
         text = text.split(" ")
         plaintext = []
 
         for word in text:
-            # if numerical, convert to a word
-            try:
-                word = num2words(word)
-            except decimal.InvalidOperation:
-                pass
+            if re.sub(r"[^0-9]", "", word):
+                # Remove currency symbols
+                if word[0] in CURRENCIES.values():
+                    currency_word = list(CURRENCIES.keys())[list(CURRENCIES.values()).index(word[0])]
 
-            word = re.sub(r"[^0-9a-zA-Z' ]", "", word.replace("-", " "))
+                    if word[-1] == 'm' or word[-1] == 'n':
+                        out_word = " " + word[-1] + "illion " + currency_word
+                    else:
+                        out_word = " " + currency_word
+                elif word[-1] == 'p':
+                    out_word = " pence "
+                else:
+                    out_word = ""
+
+                word = re.sub(r"[^0-9.]", "", word)
+
+                # If numerical, convert to natural language
+                try:
+                    word = num2words(word) + out_word
+                except decimal.InvalidOperation:
+                    word = word + out_word
+
+            word = word.replace("-", " ")
+            word = re.sub(r"[^0-9a-zA-Z' ]", "", word)
             plaintext.append(word)
 
         plaintext = " ".join(plaintext)

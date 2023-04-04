@@ -32,7 +32,7 @@ class Item(object):
         self.original_content = original_content
 
 
-def align_texts(ref_text:list, hyp_text:list, start_position:int=0):
+def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True):
     """
     Function for aligning two lists of strings denoting words in a sentence/segment.
     Used for aligning recovered texts to the original text.
@@ -45,9 +45,12 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0):
     Returns:
         mapping: A mapping of each word in hyp_text to its equivalent 1+ words in ref_text (2D list of strings: e.g. [... [['fifty', 'five'], ['55']], ...])
     """
+    if strip_punct:
+        hyp_text = [re.sub(r"[.,:;?!]", "", item.replace("-", " ")).lower() for item in hyp_text]
+        hyp_text = " ".join(hyp_text).strip().split(" ")
+    else:
+        hyp_text = [item.lower() for item in hyp_text]
 
-    hyp_text = [re.sub(r"[.,:;?!]", "", item.replace("-", " ")).lower() for item in hyp_text]
-    hyp_text = " ".join(hyp_text).strip().split(" ")
     hyp_text = hyp_text[start_position:]
     ref_text = ref_text[start_position:]
 
