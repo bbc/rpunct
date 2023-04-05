@@ -11,7 +11,10 @@ import seaborn as sns
 from simpletransformers.ner import NERModel
 from rpunct.punctuate import VALID_LABELS
 
-plt.style.use('two-panel')
+try:
+    plt.style.use('two-panel')
+except OSError:
+    pass
 
 DATA_PATH = './training/datasets/'
 RESULTS_PATH = './tests/'

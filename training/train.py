@@ -34,7 +34,7 @@ def e2e_train(
     """
     # Create or load a simpletransformers NERModel to be the RPunct model
     if model_source is None:
-        print("\t* Building RPunct model", end='\n\n')
+        print("\t* Building RPunct model", end='\n')
         model = NERModel(
             "bert",
             "bert-base-uncased",
@@ -73,7 +73,7 @@ def e2e_train(
     # Train the model
     train_data_path = os.path.join(PATH, data_source, 'rpunct_train_set.txt')
     val_data_path = os.path.join(PATH, data_source, 'rpunct_val_set.txt')
-    print(f"\n\t* Training model on dataset: {train_data_path}")
+    print(f"\t* Training model on dataset: {train_data_path}")
     print(f"\t* Validate model during training: {validation}", end='\n\n')
 
     steps, tr_details = model.train_model(train_data_path, eval_data=val_data_path)
