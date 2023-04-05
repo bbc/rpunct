@@ -16,11 +16,12 @@ punct_parser = subparsers.add_parser('rpunct', help='Run rpunct on a given input
 
 # Data subparsers
 data_source_subparsers = data_parser.add_subparsers(help="Specify type of data to be prepared.", dest="data")
-reviews_data_subparser = data_source_subparsers.add_parser('reviews', help='Yelp reviews dataset.')
 news_data_subparser = data_source_subparsers.add_parser('news-articles', help='BBC News articles dataset.')
 transcripts_data_subparser = data_source_subparsers.add_parser('news-transcripts', help='BBC News transcripts dataset.')
 subtitles_data_subparser = data_source_subparsers.add_parser('subtitles', help='BBC subtitles (all genres) dataset.')
 composite_data_subparser = data_source_subparsers.add_parser('composite', help='Composite dataset including data from multiple sources (e.g. articles and transcripts).')
+reviews_data_subparser = data_source_subparsers.add_parser('reviews', help='Yelp reviews dataset.')
+ted_data_subparser = data_source_subparsers.add_parser('ted-talks', help='Ted Talks dataset.')
 
 
 # Data preparation stage arguments
@@ -251,7 +252,7 @@ if __name__ == "__main__":
         if args.data is None:
             raise ValueError("No data source specified.")
 
-        if args.data == 'news-articles':
+        elif args.data == 'news-articles':
             if args.end < args.start:
                 raise ValueError("End year of news data range must not be earlier than start year.")
 
