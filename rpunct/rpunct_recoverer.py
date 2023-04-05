@@ -70,6 +70,8 @@ class RPunctRecoverer:
         if strip_existing_punct:
             transcript = self.strip_punctuation(transcript)
             # print('\nPlaintext: \n', transcript)
+        else:
+            transcript = transcript.replace("-", " ")
 
         if num_rec:
             transcript = self.number_recoverer.process(transcript)
@@ -132,6 +134,8 @@ class RPunctRecoverer:
 
                 if strip_existing_punct:
                     transcript = self.strip_punctuation(transcript)
+                else:
+                    transcript = transcript.replace("-", " ")
 
                 # Conduct number recovery process on segment transcript via NumberRecoverer
                 if num_rec:

@@ -3,7 +3,7 @@ from training.test import e2e_test
 from training.get_data import check_data_exists
 from training.prep_data import e2e_data
 from training.train import e2e_train
-from rpunct.rpunct_recoverer import rpunct_main
+from rpunct.rpunct_recoverer import RPunctRecoverer
 
 
 # Parser
@@ -242,13 +242,8 @@ if __name__ == "__main__":
     # Inference stage
     if args.stage == 'rpunct':
         # Generate instance of RPunct model and use to punctuate input (rpunct_recoverer.py)
-        rpunct_main(
-            model_location=args.model,
-            input_txt=args.input,
-            output_txt=args.output,
-            use_cuda=args.gpu,
-            wer=args.wer
-        )
+        punct_model = RPunctRecoverer(model_location=args.model, use_cuda=args.gpu)
+        output = punct_model.run(args.input, args.output, compute_wer=args.wer)
 
     # Data preparation stage
     elif args.stage == 'data':
