@@ -76,7 +76,7 @@ class RPunctRecoverer:
             # print('\nNumber recovered: \n', transcript)
 
         recovered = self.recoverer.punctuate(transcript)
-        # print('\nPunctuation recovered: \n', transcript)
+        # print('\nPunctuation recovered: \n', recovered)
 
         return recovered
 
@@ -171,22 +171,29 @@ class RPunctRecoverer:
                 # Remove currency symbols
                 if word[0] in CURRENCIES.values():
                     currency_word = list(CURRENCIES.keys())[list(CURRENCIES.values()).index(word[0])]
+                    word = word[1:]
 
-                    if word[-1] == 'm' or word[-1] == 'n':
+                    if word[-1] == 'm':
                         out_word = " " + word[-1] + "illion " + currency_word
+                        word = word[:-1]
+                    elif word[-1] == 'n':
+                        out_word = " " + word[-2:] + "illion " + currency_word
+                        word = word[:-2]
                     else:
                         out_word = " " + currency_word
                 elif word[-1] == 'p':
                     out_word = " pence "
+                    word = word[:-1]
                 else:
                     out_word = ""
 
-                word = re.sub(r"[^0-9.]", "", word)
-
-                # If numerical, convert to natural language
-                try:
-                    word = num2words(word) + out_word
-                except decimal.InvalidOperation:
+                # If fully numeric, convert to natural language
+                if word.isnumeric():
+                    try:
+                        word = num2words(word) + out_word
+                    except decimal.InvalidOperation:
+                        word = word + out_word
+                else:
                     word = word + out_word
 
             word = word.replace("-", " ")
