@@ -99,7 +99,7 @@ class NumberRecoverer:
                         output_text = self.bbc_style_numbers(output_text, word)
 
                 # Format numbers with many digits to include comma separators
-                elif self.comma_separators and re.sub(r"[^0-9]", "", word) and int(stripped_word) >= 10000:
+                elif self.comma_separators and re.sub(r"[^0-9]", "", word) and int(re.sub(r"[^0-9]", "", word)) >= 10000:
                     output_text += self.insert_comma_seperators(word)
 
                 # Replace colloquial decades terms with digits

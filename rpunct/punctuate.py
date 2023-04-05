@@ -7,12 +7,13 @@ __email__ = "daulet.nurmanbetov@gmail.com"
 import re
 import os
 import json
+import warnings
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
 # VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
-PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
-# PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
+# PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
+PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
 CAPI_LABELS = ['O', 'C', 'U', 'M']
 VALID_LABELS = [f"{x}{y}" for y in CAPI_LABELS for x in PUNCT_LABELS]
 TERMINALS = ['.', '!', '?']
@@ -30,16 +31,18 @@ class RestorePuncts:
     def __init__(self, model_source, use_cuda=True):
         self.mc_database = self.load_mixed_case_database()  # Lookup database to restore the capitalisation of mixed-case words (e.g. "iPlayer")
 
-        self.model = NERModel(
-            "bert",
-            model_source,
-            labels=VALID_LABELS,
-            use_cuda=use_cuda,
-            args={
-                "silent": True,
-                "max_seq_length": 512
-            }
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.model = NERModel(
+                "bert",
+                model_source,
+                labels=VALID_LABELS,
+                use_cuda=use_cuda,
+                args={
+                    "silent": True,
+                    "max_seq_length": 512
+                }
+            )
 
     def punctuate(self, text:str):
         """
