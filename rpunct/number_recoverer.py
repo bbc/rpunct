@@ -158,7 +158,7 @@ class NumberRecoverer:
     def _is_stylable_number(number):
         """Checks if a number is single digit and should be converted to a word according to the BBC Style Guide."""
         # (Includes failsafe if number is immediately followed by a punctuation character)
-        return (number.isnumeric() and int(number) < 10) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10)
+        return (number.isnumeric() and int(number) < 10 and len(number) < 2) or (not number[-1].isnumeric() and number[:-1].isnumeric() and int(number[:-1]) < 10 and len(number[:-1]) < 2)
 
     @staticmethod
     def _is_date_decade(word):
