@@ -52,14 +52,6 @@ def e2e_data(data_type='news-transcripts', tt_split='90:10',
 
         collate_news_articles(int(start_year), int(end_year), summary_or_body=article_size, train_split=split, output_directory=dataset_path)
 
-    elif data_type == 'reviews':
-        # Gather reviews data from tensorflow to local csv files
-        print("\n> Preparing data from source: Yelp reviews")
-        dataset_path = os.path.join(PATH, 'reviews')
-        download_reviews(output_directory=dataset_path)
-        data_source = data_type
-        split = 0.9
-
     elif data_type == 'news-transcripts':
         # Gather transcripts data from JSON files
         print(f"\n> Preparing data from source: BBC News transcripts")
@@ -89,6 +81,24 @@ def e2e_data(data_type='news-transcripts', tt_split='90:10',
 
         dataset_path = os.path.join(PATH, 'composite')
         create_composite_dataset(dataset_names=composite_datasets_list, train_split=split, balance=dataset_balance, output_directory=dataset_path)
+
+    elif data_type == 'reviews':
+        # Gather reviews data from tensorflow to local csv files
+        print("\n> Preparing data from source: Yelp reviews")
+        dataset_path = os.path.join(PATH, 'reviews')
+        download_reviews(output_directory=dataset_path)
+        data_source = data_type
+        split = 0.9
+
+    elif data_type == 'ted-talks':
+        # Gather subtitles data from JSON files
+        print(f"\n> Preparing data from source: Ted Talks transcripts")
+        tt_split = tt_split.split(':')
+        split = int(tt_split[0]) / 100
+        data_source = data_type.replace("-", "_")
+
+        dataset_path = os.path.join(PATH, f'ted-talks')
+        collate_ted_talks(train_split=split, output_directory=dataset_path)
 
     else:
         raise ValueError(f"Unrecognised data source: {data_type}")
@@ -369,7 +379,7 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
     # Dataset statistics of label distribution
     if print_stats:
         train_stats = get_label_stats(train_set)
-        print(f"\t\t- {train_or_test.capitalize()}ing data statistics:")
+        print(f"\t\t- {train_or_test.capitalize()}ing data statistics:", end='\n\n')
         print(train_stats)
 
         if validation:
@@ -378,18 +388,20 @@ def prepare_data(source='news-transcripts', train_or_test='train', validation=Fa
             print(val_stats)
 
 
-def load_datasets(data_dir='reviews', train_or_test='train'):
+def load_datasets(data_dir='composite', train_or_test='train'):
     """
     First, locate the data files that were split into chunks.
     Then, given this list of data paths return a single data object containing all data slices.
     """
     # convert from dir name to file name
-    if data_dir[:6] == 'news-2':
+    if data_dir.startswith('news-2'):
         data_type = 'news'
-    elif data_dir[:9] == 'news-tran':
+    elif data_dir.startswith('news-tran'):
         data_type = 'transcripts'
-    elif data_dir[:4] == 'comp':
+    elif data_dir.startswith('comp'):
         data_type = 'composite'
+    elif data_dir.startswith('ted'):
+        data_type = 'ted_talks'
     else:
         data_type = data_dir
 
@@ -399,7 +411,7 @@ def load_datasets(data_dir='reviews', train_or_test='train'):
     datasets = list(path_to_data.glob(data_file_pattern))
 
     if len(datasets) == 0:
-        raise FileNotFoundError("No dataset files found. You may have forgotten to run the `prep_data.py` preparation process on the dataset you want to use.")
+        raise FileNotFoundError(f"No dataset files found at location: '{os.path.join(path_to_data, data_file_pattern)}'. You may have forgotten to run the `prep_data.py` preparation process on the dataset you want to use.")
 
     # collate these into a single data object
     token_data = np.empty(shape=(0, 500, 3), dtype=object)
@@ -452,25 +464,54 @@ def get_label_stats(dataset):
     Generates frequency of different labels in the dataset.
     """
     calcs = {}
-    total = 0
+    total_items = 0
     for i in dataset:
         for tok in i:
-            total += 1
+            total_items += 1
             if tok[2] not in calcs.keys():
                 calcs[tok[2]] = 1
             else:
                 calcs[tok[2]] += 1
 
-    output = pd.DataFrame(columns=['Punct Tag', 'Count', 'Proportion'])
-    for k in calcs.keys():
-        row = pd.DataFrame.from_dict({
-            'Punct Tag': [k],
-            'Count': [calcs[k]],
-            'Proportion': [(calcs[k] / total) * 100]
-        })
-        output = pd.concat([output, row])
+    distribution = {
+        'capi': 0,
+        'lower': 0,
+        'mixed': 0,
+        'upper': 0,
+        'unpunct': 0,
+        '-': 0,
+        '.': 0,
+        ',': 0,
+        ':': 0,
+        ';': 0,
+        '!': 0,
+        '?': 0,
+        "'": 0,
+    }
 
-    return output.reset_index(drop=True)
+    for label in calcs:
+        label_count = calcs[label]
+
+        if label[0] == 'O':
+            distribution['unpunct'] += label_count
+        else:
+            distribution[label[0]] += label_count
+
+        if label[-1] == 'C':
+            distribution['capi'] += label_count
+        elif label[-1] == 'U':
+            distribution['upper'] += label_count
+        elif label[-1] == 'M':
+            distribution['mixed'] += label_count
+        else:
+            distribution['lower'] += label_count
+
+    for capi_punct_status in distribution.keys():
+        distribution[capi_punct_status] = round((distribution[capi_punct_status] / total_items) * 100, 2)
+
+    output = pd.DataFrame.from_dict(distribution, orient='index', columns=['Proportion (%)'])
+
+    return output
 
 
 if __name__ == "__main__":
