@@ -103,7 +103,7 @@ class RPunctRecoverer:
             T.set_description("Restoring transcript punctuation")
             for transcript in T:
                 # Conduct punctuation recovery process on segment transcript via RPunct
-                punctuated = self.process_string(transcript, num_rec=num_rec, strip_existing_punct=strip_existing_punct)  # Restore punctuation to plaintext segment using RPunct
+                punctuated = self.process_string(transcript.strip(), num_rec=num_rec, strip_existing_punct=strip_existing_punct)  # Restore punctuation to plaintext segment using RPunct
 
                 # Format recovered transcript back into list of segments
                 recovered_segments.append(punctuated)
@@ -132,7 +132,7 @@ class RPunctRecoverer:
         Punctuation/number recovery pipeline for 1D list of Item inputs.
         """
         # Extract list of words from list and convert into string sentence
-        transcript = ' '.join([item.content for item in input_segment]).strip()
+        transcript = ' '.join([item.content.strip() for item in input_segment]).strip()
 
         if strip_existing_punct:
             transcript = self.strip_punctuation(transcript)
@@ -282,7 +282,11 @@ class RPunctRecoverer:
                 original_contents = None
 
             # Itemise with word & start/end times from 1st/last word of the hyphenation
-            new_item = Item(orig_item.start_time, end_item.end_time, rec_word, original_contents)
+            new_item = Item(
+                orig_item.start_time, end_item.end_time,
+                rec_word, original_contents,
+                orig_item.likelihood
+            )
 
             # Return new itemised word to the segment
             recovered_segment[index_rec] = new_item
@@ -337,11 +341,15 @@ class RPunctRecoverer:
                 numerical_removals = original_segment_words.index('euros')
             elif original_segment_words.count('euro') > 0:
                 numerical_removals = original_segment_words.index('euro')
+        elif recovered_word.endswith('p') and original_segment_words.count('pence') > 0:
+            numerical_removals = original_segment_words.index('pence')
 
         else:
             # Align original natural language numbers to recovered digits
             mapping = align_texts(original_segment_words, recovered_words_lst, position)
             grouped_orig_words = mapping[0][0]
+
+            print("* Mapping:", mapping)
 
             # failsafe if mapping for element in question contents spill over onto the next element
             if len(mapping) > 1 and len(mapping[1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[1][1][0]):

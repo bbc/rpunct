@@ -87,7 +87,7 @@ class NumberRecoverer:
         # Correct currencies, BBC styling of numbers, and insert currency separators into numbers >= 10,000
         output_text = ""
         for i, word in enumerate(parsed_list):
-            stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower()
+            stripped_word = re.sub(r"[^0-9a-zA-Z]", "", word).lower().strip()
 
             if stripped_word:
                 # Restore currency words to their symbols
@@ -107,7 +107,7 @@ class NumberRecoverer:
                     output_text = self.decades_to_digits(output_text, stripped_word)
 
                 else:
-                    output_text += word + " "
+                    output_text += word.strip() + " "
 
         # Restore/format ordinal numbers
         output_text = self.recover_ordinals(input_text, output_text)

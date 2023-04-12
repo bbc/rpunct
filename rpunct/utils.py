@@ -14,7 +14,7 @@ class Item(object):
 
     """
 
-    def __init__(self, start_time, end_time, content, original_content=None, likelihood=1):
+    def __init__(self, start_time, end_time, content, original_content=None, likelihood=None):
         """
         Constructor.
 
@@ -47,13 +47,13 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
         mapping: A mapping of each word in hyp_text to its equivalent 1+ words in ref_text (2D list of strings: e.g. [... [['fifty', 'five'], ['55']], ...])
     """
     if strip_punct:
-        hyp_text = [re.sub(r"[.,:;?!]", "", item.replace("-", " ")).lower() for item in hyp_text]
-        hyp_text = " ".join(hyp_text).strip().split(" ")
+        hyp_text = [re.sub(r"[.,:;?!]", "", item.replace("-", " ")).lower().strip() for item in hyp_text]
+        hyp_text = " ".join(hyp_text).strip().split()
     else:
-        hyp_text = [item.lower() for item in hyp_text]
+        hyp_text = [item.lower().strip() for item in hyp_text]
 
     hyp_text = hyp_text[start_position:]
-    ref_text = ref_text[start_position:]
+    ref_text = [word.strip() for word in ref_text[start_position:]]
 
     EPS = '*'
     alignment = align(ref_text, hyp_text, EPS)
