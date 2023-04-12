@@ -364,8 +364,8 @@ class NumberRecoverer:
 
     def recover_ordinals(self, plain, recovered):
         # Align number recovered text with original s.t. we can find where ordinals have been lost
-        plain = plain.split(" ")
-        recovered = recovered.split(" ")
+        plain = plain.split()
+        recovered = recovered.split()
 
         mapping = align_texts(plain, recovered, strip_punct=False)
         formatted_output = ""

@@ -33,7 +33,7 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
-    def process(self, input_transcript, conduct_number_recovery:bool=True, input_type:str='str', strip_existing_punct:bool=True):
+    def process(self, input_transcript, conduct_number_recovery:bool=True, strip_existing_punct:bool=True):
         """
         Format input transcripts depending on their structure (segmented or pure plaintext)
         and pass them to RPunct to have punctuation/capitalisation/numbers recovered
@@ -41,7 +41,6 @@ class RPunctRecoverer:
 
         Args:
             input_transcript: a piece of plaintext to be punctuated - e.g a string, list of strings, or list of Item objects.
-            input_type: specify which one of these above inputs is the case - `str`: (segmented) text string(s) or `items`: segmented Item objects.
             conduct_number_recovery: toggle the number recoverer.
 
         Returns:
@@ -50,10 +49,19 @@ class RPunctRecoverer:
         """
         if type(input_transcript) == str:
             output = self.process_string(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
-        elif type(input_transcript) == list and len(input_transcript) > 0 and type(input_transcript[0]) == str:
-            output = self.process_string_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
-        elif input_type.startswith('item') and len(input_transcript) > 0 and type(input_transcript) == list:
-            output = self.process_items(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+
+        elif type(input_transcript) == list and len(input_transcript) > 0:
+            if all(isinstance(element, str) for element in input_transcript):
+                output = self.process_string_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+
+            elif all(isinstance(element, Item) for element in input_transcript):
+                output = self.process_items(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+
+            elif all(isinstance(element, list) for element in input_transcript) and all(isinstance(element, Item) for segment in input_transcript for element in segment):
+                output = self.process_item_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+
+            else:
+                raise TypeError("Input transcript to recoverer is not in a supported format/type (must be 'str' or 'Items')")
         else:
             raise TypeError("Input transcript to recoverer is not in a supported format/type (must be 'str' or 'Items')")
 
@@ -119,39 +127,45 @@ class RPunctRecoverer:
 
         return punctuated
 
-    def process_items(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True):
+    def process_items(self, input_segment:list, num_rec:bool=True, strip_existing_punct:bool=True):
         """
-        Punctuation/number recovery pipeline for (list of) segmented Item inputs.
+        Punctuation/number recovery pipeline for 1D list of Item inputs.
         """
-        # Extracts list of words from flattened list, converts to a single sting per speaker segment
-        transcript_segments = [[item.content for item in sublist] for sublist in input_segments]
-        recovered_segment_words = []
+        # Extract list of words from list and convert into string sentence
+        transcript = ' '.join([item.content for item in input_segment]).strip()
 
-        with tqdm(transcript_segments) as T:
+        if strip_existing_punct:
+            transcript = self.strip_punctuation(transcript)
+        else:
+            transcript = transcript.replace("-", " ")
+
+        # Conduct number recovery process on segment transcript via NumberRecoverer
+        if num_rec:
+            recovered = self.number_recoverer.process(transcript)
+        else:
+            recovered = transcript
+
+        # Conduct punctuation recovery process on segment transcript via RPunct
+        recovered = self.recoverer.punctuate(recovered)
+
+        # Format recovered transcript back into list of segments
+        recovered_words = recovered.split(' ')
+        recovered_segment = self.itemise_segment(input_segment, recovered_words)
+
+        return recovered_segment
+
+    def process_item_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True):
+        """
+        Punctuation/number recovery pipeline for (2D list of) segmented Item inputs.
+        """
+        output_segments = []
+
+        with tqdm(input_segments) as T:
             T.set_description("Restoring transcript punctuation")
+            # Recover punctuation of each segment of items individually
             for segment in T:
-                transcript = ' '.join(segment).strip()
-
-                if strip_existing_punct:
-                    transcript = self.strip_punctuation(transcript)
-                else:
-                    transcript = transcript.replace("-", " ")
-
-                # Conduct number recovery process on segment transcript via NumberRecoverer
-                if num_rec:
-                    recovered = self.number_recoverer.process(transcript)
-                else:
-                    recovered = transcript
-
-                # Conduct punctuation recovery process on segment transcript via RPunct
-                recovered = self.recoverer.punctuate(recovered)
-
-                # Format recovered transcript back into list of segments
-                recovered_words = recovered.split(' ')
-                recovered_segment_words.append(recovered_words)
-
-        # Convert recovered words to Item objects
-        output_segments = self.itemise_segments(input_segments, recovered_segment_words)
+                recovered_segment_items = self.process_items(segment, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
+                output_segments.append(recovered_segment_items)
 
         return output_segments
 
@@ -215,94 +229,86 @@ class RPunctRecoverer:
         """
         return word.count('-') > 0 or re.sub(r"[^0-9]", "", word)
 
-    def itemise_segments(self, all_original_segments, all_recovered_segments):
+    def itemise_segment(self, original_segment, recovered_segment):
         """
-        Convert recovered words to segments of items (not just strings) including time code data
+        Convert recovered words of a single segment into Items with time code data
         Need to recompute timing information on a per-word level for each segment as some words may have been concatenated by hyphenation,
         changing their end time.
         """
+        # Capitalise the first word of every segment
+        recovered_segment[0] = recovered_segment[0].capitalize()
 
-        for index_segment in range(len(all_original_segments)):
-            # Get original (plaintext) and punctuation-restored segments
-            original_segment = all_original_segments[index_segment]
-            recovered_segment = all_recovered_segments[index_segment]
+        # Make the last word of a segment a full stop if no punctuation present
+        last_word = recovered_segment[-1]
+        if last_word[-1] not in string.punctuation:
+            recovered_segment[-1] = last_word + '.'
 
-            # Capitalise the first word of every segment
-            recovered_segment[0] = recovered_segment[0].capitalize()
+        # Itemise segment words (taking into account that recovered segment may be fewer words due to hyphenation)
+        index_orig = 0
+        index_rec = 0
+        total_fewer_words = 0
 
-            # Make the last word of a segment a full stop if no punctuation present
-            last_word = recovered_segment[-1]
-            if last_word[-1] not in string.punctuation:
-                recovered_segment[-1] = last_word + '.'
+        while index_orig < len(original_segment) and index_rec < len(recovered_segment):
+            # Get original and restored word from segment
+            orig_item = original_segment[index_orig]
+            rec_word = recovered_segment[index_rec]
 
-            # Itemise segment words (taking into account that recovered segment may be fewer words due to hyphenation)
-            index_orig = 0
-            index_rec = 0
-            total_fewer_words = 0
+            # Create item object per recovered word including correct time codes
+            if self._is_contracted_word(rec_word):
+                if rec_word.count('-') > 0:  # hyphenation case
+                    # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
+                    no_skip_words = rec_word.count('-')
 
-            while index_orig < len(original_segment) and index_rec < len(recovered_segment):
-                # Get original and restored word from segment
-                orig_item = original_segment[index_orig]
-                rec_word = recovered_segment[index_rec]
+                    # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
+                    if re.sub(r"[^0-9]", "", rec_word):
+                        # if in the case of a hyphenation + digitiation, must find where the digitisation happens within the hyphenation and start from here
+                        start_position = [bool(re.sub(r"[^0-9]", "", subword)) for subword in rec_word.split('-')].index(True)
+                        no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=start_position)
 
-                # Create item object per recovered word including correct time codes
-                if self._is_contracted_word(rec_word):
-                    if rec_word.count('-') > 0:  # hyphenation case
-                        # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
-                        no_skip_words = rec_word.count('-')
+                else:  # number recovery case
+                    no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
 
-                        # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
-                        if re.sub(r"[^0-9]", "", rec_word):
-                            # if in the case of a hyphenation + digitiation, must find where the digitisation happens within the hyphenation and start from here
-                            start_position = [bool(re.sub(r"[^0-9]", "", subword)) for subword in rec_word.split('-')].index(True)
-                            no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=start_position)
+                # Find the final word of the contraction in the orginal segments list
+                end_item = original_segment[index_orig + no_skip_words]
+                original_contents = original_segment[index_orig : index_orig + no_skip_words + 1]
 
-                    else:  # number recovery case
-                        no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
+                # Increment original segments list to jump to the end of the contracted word
+                index_orig += no_skip_words
+                total_fewer_words += no_skip_words
 
-                    # Find the final word of the contraction in the orginal segments list
-                    end_item = original_segment[index_orig + no_skip_words]
-                    original_contents = original_segment[index_orig : index_orig + no_skip_words + 1]
+            else:  # one-to-one mapping case
+                # Itemise with word & start/end times from associated original item
+                end_item = orig_item
+                original_contents = None
 
-                    # Increment original segments list to jump to the end of the contracted word
-                    index_orig += no_skip_words
-                    total_fewer_words += no_skip_words
+            # Itemise with word & start/end times from 1st/last word of the hyphenation
+            new_item = Item(orig_item.start_time, end_item.end_time, rec_word, original_contents)
 
-                else:  # one-to-one mapping case
-                    # Itemise with word & start/end times from associated original item
-                    end_item = orig_item
-                    original_contents = None
+            # Return new itemised word to the segment
+            recovered_segment[index_rec] = new_item
+            index_orig += 1
+            index_rec += 1
 
-                # Itemise with word & start/end times from 1st/last word of the hyphenation
-                new_item = Item(orig_item.start_time, end_item.end_time, rec_word, original_contents)
-
-                # Return new itemised word to the segment
-                recovered_segment[index_rec] = new_item
-                index_orig += 1
-                index_rec += 1
-
-            # Verify all recovered words have been itemised
-            try:
-                assert index_rec == len(recovered_segment), \
-                    f"While reconstructing segment structure, one or more recovered words have been missed. \
-                        \n Original text: {[item.content for item in original_segment]} \
-                        \n Recovered text: {[item.content for item in recovered_segment]}"
-            except AttributeError:
-                assert index_rec == len(recovered_segment), \
-                    f"While reconstructing segment structure, one or more recovered words have been missed. \
-                        \n Original text: {[item.content for item in original_segment]} \
-                        \n Recovered text: {[item for item in recovered_segment]}"
-
-            # Verify that the reconstructed segment is the same length as original (excluding words removed by hyphenation)
-            assert len(recovered_segment) == (len(original_segment) - total_fewer_words), \
-                f"While reconstructing segment structure, a mistake has occured. \
+        # Verify all recovered words have been itemised
+        try:
+            assert index_rec == len(recovered_segment), \
+                f"While reconstructing segment structure, one or more recovered words have been missed. \
                     \n Original text: {[item.content for item in original_segment]} \
                     \n Recovered text: {[item.content for item in recovered_segment]}"
+        except AttributeError:
+            assert index_rec == len(recovered_segment), \
+                f"While reconstructing segment structure, one or more recovered words have been missed. \
+                    \n Original text: {[item.content for item in original_segment]} \
+                    \n Recovered text: {[item for item in recovered_segment]}"
 
-            # Return new itemised segment to the list of segments
-            all_recovered_segments[index_segment] = recovered_segment
+        # Verify that the reconstructed segment is the same length as original (excluding words removed by hyphenation)
+        assert len(recovered_segment) == (len(original_segment) - total_fewer_words), \
+            f"While reconstructing segment structure, a mistake has occured. \
+                \n Original text: {[item.content for item in original_segment]} \
+                \n Recovered text: {[item.content for item in recovered_segment]}"
 
-        return all_recovered_segments
+        # Return new itemised segment to the list of segments
+        return recovered_segment
 
     def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0):
         # Generate clean list of original words

@@ -14,7 +14,7 @@ class Item(object):
 
     """
 
-    def __init__(self, start_time, end_time, content, original_content=None):
+    def __init__(self, start_time, end_time, content, original_content=None, likelihood=1):
         """
         Constructor.
 
@@ -30,6 +30,7 @@ class Item(object):
         self.end_time = round(float(end_time), 3)
         self.content = content
         self.original_content = original_content
+        self.likelihood = likelihood
 
 
 def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True):
