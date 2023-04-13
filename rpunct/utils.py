@@ -70,4 +70,18 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
             # single substitution (one-to-one mapping)
             mapping.append([[ref], [hyp]])
 
+        # UNCOMMENT WHEN PRODUCTIONISED (REMOVE ABOVE)
+        # if ref == EPS:  # insertion (one-to-many)
+        #     if len(mapping) > 0:
+        #         mapping[-1][1].append(hyp)
+        #     else:
+        #         mapping.append([[], [hyp]])
+        # elif hyp == EPS:  # deletion (many-to-one)
+        #     if len(mapping) > 0:
+        #         mapping[-1][0].append(ref)  # append new word to multi-word element
+        #     else:
+        #         mapping.append([[ref], []])
+        # else:  # single substitution (one-to-one)
+        #     mapping.append([[ref], [hyp]])
+
     return mapping

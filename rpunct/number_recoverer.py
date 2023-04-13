@@ -144,8 +144,7 @@ class NumberRecoverer:
             parsed = number_parser(text)
 
         # `number_parser` adds spaces around numbers, interrupting the formatting of any trailing punctuation, so re-concatenate
-        for punct in string.punctuation:
-            parsed = parsed.replace(f" {punct}", f"{punct}")
+        parsed = re.sub(r"^([0-9.]+)[ ]([!?,-.:;'/\\#$%&'()*+\"])$", r"\1\2", parsed)
 
         return parsed
 
@@ -222,25 +221,25 @@ class NumberRecoverer:
         lookback = 1
 
         # Scan through lookback window to find the number to which the currency symbol punctuates
-        text_list = text.split(" ")
+        text_list = text.strip().split()
         quantifying_tag = ""
+        lookback_range = min(5, len(text_list) + 1)
 
-        while lookback < 5:
+        while lookback < lookback_range:
             prev_word = text_list[-lookback]
             prev_word_stripped = re.sub(r"[^0-9a-zA-Z]", "", prev_word)
 
             # When a numeric word is found, reconstruct the output text around this (i.e. previous_text + currency_symbol + number + trailing_text)
             if prev_word_stripped.isnumeric():
                 new_output_text = text_list[:-lookback]  # previous text before currency number
-
                 new_output_text.append(CURRENCIES.get(stripped_currency) + prev_word +  quantifying_tag)  # currency symbol and number (including any large denominators - e.g. million -> m)
-
-                new_output_text.extend([word for word in text_list[-lookback + 1:] if word not in STRING_NUMBERS.keys()])  # trailing text after currency symbol/number
-                text = " ".join(new_output_text)
+                out_text = " ".join(new_output_text)
 
                 # Add back in any punctuation trailing the original currency keyword
                 if not currency[-1].isalnum():
-                    text = text[:-1] + currency[-1] + " "
+                    out_text += currency[-1] + " "
+                else:
+                    out_text += " "
 
                 found = True
                 break
@@ -255,9 +254,9 @@ class NumberRecoverer:
 
         # Keep the currency keyword as text if no numeric words found in lookback window
         if not found:
-            text += currency + " "
+            out_text = text + currency + " "
 
-        return text
+        return out_text
 
     @staticmethod
     def convert_pence_to_p(text):
