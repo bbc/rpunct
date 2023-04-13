@@ -324,7 +324,7 @@ class RPunctRecoverer:
 
     def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0) -> int:
         # Generate clean list of original words
-        original_segment_words = [item.content.lower() for item in plaintext_items_lst]
+        original_segment_words = [item.content.strip().lower() for item in plaintext_items_lst]
 
         # If the recovered word has a percent sign the index of the word 'percent' in the original text gives number of removals
         # Similar technique if a currency symbol is present
@@ -332,7 +332,7 @@ class RPunctRecoverer:
         numerical_removals = 0
 
         if recovered_word.endswith('%') and original_segment_words.count('percent') > 0:
-                numerical_removals = original_segment_words.index('percent')
+            numerical_removals = original_segment_words.index('percent')
 
         elif recovered_word.startswith('£'):
             if original_segment_words.count('pounds') > 0:

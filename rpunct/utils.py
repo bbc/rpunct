@@ -28,7 +28,7 @@ class Item(object):
 
         self.start_time = round(float(start_time), 3)
         self.end_time = round(float(end_time), 3)
-        self.content = content
+        self.content = content.strip()
         self.original_content = original_content
         self.likelihood = likelihood
 
