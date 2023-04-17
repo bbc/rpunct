@@ -33,7 +33,7 @@ class Item(object):
         self.likelihood = likelihood
 
 
-def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True):
+def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True, early_exit:bool=False):
     """
     Function for aligning two lists of strings denoting words in a sentence/segment.
     Used for aligning recovered texts to the original text.
@@ -42,6 +42,7 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
         ref_text: The reference text we are aligning to (list of strings) e.g. an original plaintext
         hyp_text: The hypothesis text that we are aligning to the reference (list of strings) e.g. a recovered text
         start_position: Index within texts from which to start the alignment (int)
+        early_exit: Return mapping as soon as first element of mapping is aligned (speeds up alignment aspect of itemising step)
 
     Returns:
         mapping: A mapping of each word in hyp_text to its equivalent 1+ words in ref_text (2D list of strings: e.g. [... [['fifty', 'five'], ['55']], ...])
@@ -65,6 +66,9 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
     unmatched_refs = []
 
     for ref, hyp in alignment:
+        if early_exit and len(mapping) > 0 and ref != EPS and hyp != EPS:  # early exiting to speed up itemisation
+            break
+
         if ref == EPS:  # insertion (one-to-many)
             mapping[-1][1].append(hyp)
         elif hyp == EPS:  # deletion (many-to-one)

@@ -33,7 +33,7 @@ class RPunctRecoverer:
             )
             self.number_recoverer = NumberRecoverer()
 
-    def process(self, input_transcript, conduct_number_recovery:bool=True, strip_existing_punct:bool=True):
+    def process(self, input_transcript, conduct_number_recovery:bool=True, strip_existing_punct:bool=True, quiet:bool=False):
         """
         Format input transcripts depending on their structure (segmented or pure plaintext)
         and pass them to RPunct to have punctuation/capitalisation/numbers recovered
@@ -52,13 +52,13 @@ class RPunctRecoverer:
 
         elif type(input_transcript) == list and len(input_transcript) > 0:
             if all(isinstance(element, str) for element in input_transcript):
-                output = self.process_string_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+                output = self.process_string_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct, quiet=quiet)
 
             elif all(isinstance(element, Item) for element in input_transcript):
                 output = self.process_items(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
 
             elif all(isinstance(element, list) for element in input_transcript) and all(isinstance(element, Item) for segment in input_transcript for element in segment):
-                output = self.process_item_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct)
+                output = self.process_item_segments(input_transcript, num_rec=conduct_number_recovery, strip_existing_punct=strip_existing_punct, quiet=quiet)
 
             else:
                 raise TypeError("Input transcript to recoverer is not in a supported format/type (must be 'str' or 'Items')")
@@ -90,7 +90,7 @@ class RPunctRecoverer:
 
         return recovered
 
-    def process_string_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True) -> list:
+    def process_string_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True, quiet:bool=False) -> list:
         """
         Punctuation/number recovery pipeline for list of segmented string inputs.
 
@@ -99,14 +99,18 @@ class RPunctRecoverer:
         """
         recovered_segments = []
 
-        with tqdm(input_segments) as T:
+        if quiet:
+            T = input_segments
+        else:
+            T = tqdm(input_segments)
             T.set_description("Restoring transcript punctuation")
-            for transcript in T:
-                # Conduct punctuation recovery process on segment transcript via RPunct
-                punctuated = self.process_string(transcript.strip(), num_rec=num_rec, strip_existing_punct=strip_existing_punct)  # Restore punctuation to plaintext segment using RPunct
 
-                # Format recovered transcript back into list of segments
-                recovered_segments.append(punctuated)
+        for transcript in T:
+            # Conduct punctuation recovery process on segment transcript via RPunct
+            punctuated = self.process_string(transcript.strip(), num_rec=num_rec, strip_existing_punct=strip_existing_punct)  # Restore punctuation to plaintext segment using RPunct
+
+            # Format recovered transcript back into list of segments
+            recovered_segments.append(punctuated)
 
         return recovered_segments
 
@@ -154,18 +158,22 @@ class RPunctRecoverer:
 
         return recovered_segment
 
-    def process_item_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True) -> list:
+    def process_item_segments(self, input_segments:list, num_rec:bool=True, strip_existing_punct:bool=True, quiet:bool=False) -> list:
         """
         Punctuation/number recovery pipeline for (2D list of) segmented Item inputs.
         """
         output_segments = []
 
-        with tqdm(input_segments) as T:
+        if quiet:
+            T = input_segments
+        else:
+            T = tqdm(input_segments)
             T.set_description("Restoring transcript punctuation")
-            # Recover punctuation of each segment of items individually
-            for segment in T:
-                recovered_segment_items = self.process_items(segment, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
-                output_segments.append(recovered_segment_items)
+
+        # Recover punctuation of each segment of items individually
+        for segment in T:
+            recovered_segment_items = self.process_items(segment, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
+            output_segments.append(recovered_segment_items)
 
         return output_segments
 
@@ -227,7 +235,7 @@ class RPunctRecoverer:
         """
         Texts whether a recovered word has been comnstructured from multiple original words e.g. "fifty five" -> "55"
         """
-        return re.sub(r'[.,:;!?]', "", new_word).isnumeric() or re.sub(r'[.,:;!?]', "", new_word.strip().lower()) != re.sub(r'[.,:;!?]', "", old_word.strip().lower())
+        return re.sub(r'[.,:;!?]', "", new_word.strip().lower()) != re.sub(r'[.,:;!?]', "", old_word.strip().lower())
 
     def itemise_segment(self, original_segment:list, recovered_segment:list) -> list:
         """
@@ -351,7 +359,7 @@ class RPunctRecoverer:
             elif True in percent_word_mask:
                 numerical_removals = percent_word_mask.index(True)
             else:
-                mapping = align_texts(original_segment_words, recovered_words_lst, position)
+                mapping = align_texts(original_segment_words, recovered_words_lst, position, early_exit=True)
                 numerical_removals = len(mapping[0][0]) - 1
 
         elif recovered_word.endswith('p') and not original_segment_words[0].endswith('p') and original_segment_words.count('pence') > 0:
@@ -367,7 +375,7 @@ class RPunctRecoverer:
 
         else:
             # Align original natural language numbers to recovered digits
-            mapping = align_texts(original_segment_words, recovered_words_lst, position)
+            mapping = align_texts(original_segment_words, recovered_words_lst, position, early_exit=True)
             numerical_removals = len(mapping[0][0]) - 1
 
         return numerical_removals
@@ -379,7 +387,7 @@ class RPunctRecoverer:
         if True in subword_mask:
             subword_index = subword_mask.index(True)
         else:
-            mapping = align_texts(orig_words, rec_words, alignment_start)
+            mapping = align_texts(orig_words, rec_words, alignment_start, early_exit=True)
             subword_index = len(mapping[0][0]) - 1
 
         return subword_index
