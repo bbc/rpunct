@@ -20,3 +20,4 @@ label-distributions/
 rpunct/itemising.py
 test_run_rpunct.py
 punctuate_whisper_segments.py
+*.json

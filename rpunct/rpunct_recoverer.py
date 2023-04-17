@@ -223,13 +223,13 @@ class RPunctRecoverer:
         return plaintext
 
     @staticmethod
-    def _is_contracted_word(word:str):
+    def _is_changed_word(new_word:str, old_word:str):
         """
         Texts whether a recovered word has been comnstructured from multiple original words e.g. "fifty five" -> "55"
         """
-        return word.count('-') > 0 or re.sub(r"[^0-9]", "", word)
+        return re.sub(r'[.,:;!?]', "", new_word).isnumeric() or re.sub(r'[.,:;!?]', "", new_word.strip().lower()) != re.sub(r'[.,:;!?]', "", old_word.strip().lower())
 
-    def itemise_segment(self, original_segment, recovered_segment) -> list:
+    def itemise_segment(self, original_segment:list, recovered_segment:list) -> list:
         """
         Convert recovered words of a single segment into Items with time code data
         Need to recompute timing information on a per-word level for each segment as some words may have been concatenated by hyphenation,
@@ -253,16 +253,18 @@ class RPunctRecoverer:
             orig_item = original_segment[index_orig]
             rec_word = recovered_segment[index_rec]
 
-            print(f"* Original: {orig_item.content}; Recovered: {rec_word};")
-
             # Skip over null words in original plaintext as these are removed from the punctuated text
             if not re.sub(r"[^0-9a-zA-Z]", "", orig_item.content):
                 index_orig += 1
                 total_fewer_words += 1
                 continue
 
+            # print(f" * Original: {orig_item.content}; Recovered: {rec_word};")
+
             # Create item object per recovered word including correct time codes
-            if self._is_contracted_word(rec_word) or (re.sub(r"[^0-9a-zA-Z]", "", rec_word.lower()) != re.sub(r"[^0-9a-zA-Z]", "", orig_item.content.lower())):
+            if self._is_changed_word(rec_word, orig_item.content):
+                # print(f" > Original: {orig_item.content}; Recovered: {rec_word};", end='\r')
+
                 if rec_word.count('-') > 0:  # hyphenation case
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
                     no_skip_words = rec_word.count('-')
@@ -270,15 +272,21 @@ class RPunctRecoverer:
                     # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
                     if re.sub(r"[^0-9]", "", rec_word):
                         # if in the case of a hyphenation + digitiation, must find where the digitisation happens within the hyphenation and start from here
-                        start_position = [bool(re.sub(r"[^0-9]", "", subword)) for subword in rec_word.split('-')].index(True)
-                        no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=start_position)
+                        numerical_subword_locations = [bool(re.sub(r"[^0-9]", "", subword)) for subword in rec_word.split('-')]
+
+                        for sub_index, subword_is_numeric in enumerate(numerical_subword_locations):
+                            if subword_is_numeric:
+                                no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=sub_index)
 
                 else:  # number recovery case
                     no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
 
+                # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]}; Recovered: {rec_word};")
+
                 # Find the final word of the contraction in the orginal segments list
                 end_item = original_segment[index_orig + no_skip_words]
-                original_contents = original_segment[index_orig : index_orig + no_skip_words + 1]
+                original_contents = [item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]
+                # print(f"   - Concatenated words: {original_contents}")
 
                 # Increment original segments list to jump to the end of the contracted word
                 index_orig += no_skip_words
@@ -288,6 +296,8 @@ class RPunctRecoverer:
                 # Itemise with word & start/end times from associated original item
                 end_item = orig_item
                 original_contents = None
+
+                # print(f" * Original: {orig_item.content}; Recovered: {rec_word};")
 
             # Itemise with word & start/end times from 1st/last word of the hyphenation
             new_item = Item(
@@ -324,46 +334,56 @@ class RPunctRecoverer:
 
     def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0) -> int:
         # Generate clean list of original words
-        original_segment_words = [item.content.strip().lower() for item in plaintext_items_lst]
+        original_segment_words = [re.sub(r'[.,:;!?]', '', item.content.replace("-", " ").strip().lower()) for item in plaintext_items_lst]
 
         # If the recovered word has a percent sign the index of the word 'percent' in the original text gives number of removals
         # Similar technique if a currency symbol is present
         recovered_word = re.sub(r'[.,:;!?]', '', recovered_words_lst[0])
-        numerical_removals = 0
 
-        if recovered_word.endswith('%') and original_segment_words.count('percent') > 0:
-            numerical_removals = original_segment_words.index('percent')
+        if recovered_word.endswith('%') and not original_segment_words[0].endswith('%'):
+            percent_symbol_mask = list(map(lambda x: '%' in x, original_segment_words))
+            percent_word_mask = list(map(lambda x: x == 'percent', original_segment_words))
 
-        elif recovered_word.startswith('£'):
-            if original_segment_words.count('pounds') > 0:
-                numerical_removals = original_segment_words.index('pounds')
-            elif original_segment_words.count('pound') > 0:
-                numerical_removals = original_segment_words.index('pound')
-        elif recovered_word.startswith('$'):
-            if original_segment_words.count('dollars') > 0:
-                numerical_removals = original_segment_words.index('dollars')
-            elif original_segment_words.count('dollar') > 0:
-                numerical_removals = original_segment_words.index('dollar')
-        elif recovered_word.startswith('€'):
-            if original_segment_words.count('euros') > 0:
-                numerical_removals = original_segment_words.index('euros')
-            elif original_segment_words.count('euro') > 0:
-                numerical_removals = original_segment_words.index('euro')
-        elif recovered_word.endswith('p') and original_segment_words.count('pence') > 0:
+            if True in percent_symbol_mask and True in percent_word_mask:
+                numerical_removals = min(percent_symbol_mask.index(True), percent_word_mask.index(True))
+            elif True in percent_symbol_mask:
+                numerical_removals = percent_symbol_mask.index(True)
+            elif True in percent_word_mask:
+                numerical_removals = percent_word_mask.index(True)
+            else:
+                mapping = align_texts(original_segment_words, recovered_words_lst, position)
+                numerical_removals = len(mapping[0][0]) - 1
+
+        elif recovered_word.endswith('p') and not original_segment_words[0].endswith('p') and original_segment_words.count('pence') > 0:
             numerical_removals = original_segment_words.index('pence')
+        elif recovered_word.startswith('£') and not original_segment_words[0].startswith('£'):
+            numerical_removals = self.find_subword_index(['pound', 'pounds'], original_segment_words, recovered_words_lst, position)
+        elif recovered_word.startswith('$') and not original_segment_words[0].startswith('$'):
+            numerical_removals = self.find_subword_index(['dollar', 'dollars'], original_segment_words, recovered_words_lst, position)
+        elif recovered_word.startswith('€') and not original_segment_words[0].startswith('€'):
+            numerical_removals = self.find_subword_index(['euro', 'euros'], original_segment_words, recovered_words_lst, position)
+        elif recovered_word.startswith('¥') and not original_segment_words[0].startswith('¥') and original_segment_words.count('yen') > 0:
+            numerical_removals = original_segment_words.index('yen')
 
         else:
             # Align original natural language numbers to recovered digits
             mapping = align_texts(original_segment_words, recovered_words_lst, position)
-            grouped_orig_words = mapping[0][0]
-
-            # failsafe if mapping for element in question contents spill over onto the next element
-            if len(mapping) > 1 and len(mapping[1][0]) > 1 and not re.sub(r"[^0-9-]", "", mapping[1][1][0]):
-                grouped_orig_words.extend(mapping[1][0][:-1])
-
-            numerical_removals = len(grouped_orig_words) - 1
+            numerical_removals = len(mapping[0][0]) - 1
 
         return numerical_removals
+
+    @staticmethod
+    def find_subword_index(subwords:list, orig_words:list, rec_words:list, alignment_start:int=0):
+        subword_mask = list(map(lambda x: x in subwords, orig_words))
+
+        if True in subword_mask:
+            subword_index = subword_mask.index(True)
+        else:
+            mapping = align_texts(orig_words, rec_words, alignment_start)
+            subword_index = len(mapping[0][0]) - 1
+
+        return subword_index
+
 
     @classmethod
     def load(cls, model_path=None, bbc_data_loc=False):

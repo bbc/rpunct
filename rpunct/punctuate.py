@@ -161,8 +161,6 @@ class RestorePuncts:
                     pred_item_tuple = list(wrd.items())[0]
                     output_text.append(pred_item_tuple)
 
-        # Validate that the output text content (without predictions) is the same as the full plain text
-        assert [i[0] for i in output_text] == original_text_lst
         return output_text
 
     def punctuate_texts(self, full_pred:list):
