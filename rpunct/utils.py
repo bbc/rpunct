@@ -65,13 +65,17 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
     alignment = align(ref_text, hyp_text, EPS)
     mapping = []
     unmatched_refs = []
+    unmatched_hyps = []
 
     for ref, hyp in alignment:
         if early_exit and len(mapping) > 0 and ref != EPS and hyp != EPS:  # early exiting to speed up itemisation
             break
 
         if ref == EPS:  # insertion (one-to-many)
-            mapping[-1][1].append(hyp)
+            if len(mapping) > 0:
+                mapping[-1][1].append(hyp)
+            else:
+                unmatched_hyps.append(hyp)  # protection against mismatches in the aligned text
         elif hyp == EPS:  # deletion (many-to-one)
             if len(mapping) > 0:
                 mapping[-1][0].append(ref)  # append new word to multi-word element
@@ -82,6 +86,7 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
 
     if len(mapping) > 0:
         mapping[0][0] = unmatched_refs + mapping[0][0]
+        mapping[0][1] = unmatched_hyps + mapping[0][1]
 
     # print(f" - ALIGNMENT: {alignment[:min(5, len(alignment)-1)]}")
     # print(f" - MAPPING: {mapping[:min(5, len(mapping)-1)]}", end='\n\n')
