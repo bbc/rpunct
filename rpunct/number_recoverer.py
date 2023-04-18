@@ -110,10 +110,9 @@ class NumberRecoverer:
                 else:
                     output_text += word.strip() + " "
 
-        output_text = output_text.strip()
-
         # Restore/format ordinal numbers
         output_text = self.recover_ordinals(input_text, output_text)
+        output_text = output_text.strip()
 
         return output_text
 

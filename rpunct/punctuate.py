@@ -45,7 +45,7 @@ class RestorePuncts:
                 }
             )
 
-    def punctuate(self, text:str, quiet:bool=True):
+    def punctuate(self, text:str):
         """
         Performs punctuation restoration on plaintext (in English only).
 
@@ -56,23 +56,43 @@ class RestorePuncts:
             - punct_text (str): fully punctuated output text.
         """
         # Restoration pipeline
-        segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
-        preds_lst = self.predict(segments, quiet=quiet)  # Generate word-level punctuation predictions
+        model_segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
+        preds_lst = self.predict(model_segments)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
         punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def predict(self, input_segments, quiet:bool=True):
+    def punctuate_segments(self, segments:list):
+
+        # Define segment boundaries s.t. they can be restored after being fed through the model
+        segment_lengths = [len(s.split()) for s in segments]
+        segment_boundaries = [(0, 0)]
+
+        for length in segment_lengths:
+            start_idx = segment_boundaries[-1][1]
+            end_idx = start_idx + length
+            segment_boundaries.append((start_idx, end_idx))
+
+        segment_boundaries = segment_boundaries[1:]
+
+        # Make predictions over entire concatenated text
+        text_block = " ".join(segments)
+        model_segments = self.segment_text_blocks(text_block)
+
+        predictions = self.predict(model_segments)
+        combined_predictions = self.combine_results(predictions, text_block)
+
+        # Break predictions back down into segments and apply pnctuation predictions
+        segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
+        punct_text = [self.punctuate_texts(pred) for pred in segmented_predictions]
+
+        return punct_text
+
+    def predict(self, input_segments):
         """
         Passes the unpunctuated text to the model for punctuation.
         """
-        if quiet:
-            I = input_segments
-        else:
-            I = tqdm(input_segments)
-            I.set_description("Punctuating text segments")
-
         text_segments = [i['text'] for i in input_segments]
         predictions = self.model.predict(text_segments)
         predicted_segments = predictions[0]
@@ -167,7 +187,7 @@ class RestorePuncts:
         """
         Given a list of predictions from the model, applies the predictions to the plaintext, restoring full punctuation and capitalisation.
         """
-        valid_punctuation = [p for p in PUNCT_LABELS if p not in ["O", "'"]]
+        valid_punctuation = [p for p in PUNCT_LABELS if p not in ["O", "'", "%"]]
         punct_resp = ""
 
         # Cycle through the list containing each word and its predicted label
@@ -218,7 +238,7 @@ class RestorePuncts:
         punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
         # Ensure text ends with a terminal
-        if punct_resp[-1].isalnum():
+        if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
             punct_resp += "."
         elif punct_resp[-1] not in TERMINALS:
             punct_resp = punct_resp[:-1] + "."
