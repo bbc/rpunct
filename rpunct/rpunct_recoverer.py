@@ -8,6 +8,7 @@ import os
 import torch
 import string
 import decimal
+from time import time
 from tqdm import tqdm
 from jiwer import wer
 from num2words import num2words
@@ -67,7 +68,7 @@ class RPunctRecoverer:
 
         return output
 
-    def process_string(self, transcript:str, num_rec:bool=True, strip_existing_punct:bool=True) -> str:
+    def process_string(self, transcript:str, num_rec:bool=True, strip_existing_punct:bool=True, quiet:bool=True) -> str:
         """
         Punctuation/number recovery pipeline a single string input transcript.
 
@@ -85,7 +86,7 @@ class RPunctRecoverer:
             transcript = self.number_recoverer.process(transcript)
             # print('\nNumber recovered: \n', transcript)
 
-        recovered = self.recoverer.punctuate(transcript)
+        recovered = self.recoverer.punctuate(transcript, quiet=quiet)
         # print('\nPunctuation recovered: \n', recovered)
 
         return recovered
@@ -131,7 +132,7 @@ class RPunctRecoverer:
 
         return punctuated
 
-    def process_items(self, input_segment:list, num_rec:bool=True, strip_existing_punct:bool=True) -> list:
+    def process_items(self, input_segment:list, num_rec:bool=True, strip_existing_punct:bool=True, quiet:bool=True) -> list:
         """
         Punctuation/number recovery pipeline for 1D list of Item inputs.
         """
@@ -150,7 +151,7 @@ class RPunctRecoverer:
             recovered = transcript
 
         # Conduct punctuation recovery process on segment transcript via RPunct
-        recovered = self.recoverer.punctuate(recovered)
+        recovered = self.recoverer.punctuate(recovered, quiet=quiet)
 
         # Format recovered transcript back into list of segments
         recovered_words = recovered.split(' ')
@@ -313,6 +314,10 @@ class RPunctRecoverer:
                 rec_word, original_contents,
                 orig_item.likelihood
             )
+
+            # Explicitly specify within Item whether RPunct has been used to correct punctuation
+            if rec_word.strip() != orig_item.content.strip():
+                new_item.restored_punctuation = True
 
             # Return new itemised word to the segment
             recovered_segment[index_rec] = new_item

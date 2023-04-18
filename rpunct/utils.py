@@ -13,7 +13,7 @@ class Item(object):
 
     """
 
-    def __init__(self, start_time, end_time, content, original_content=None, likelihood=1):
+    def __init__(self, start_time, end_time, content, original_content=None, likelihood=1, restored_punctuation=False):
         """
         Constructor.
 
@@ -31,6 +31,7 @@ class Item(object):
         self.content = content.strip()
         self.original_content = original_content
         self.likelihood = likelihood
+        self.restored_punctuation = restored_punctuation
 
 
 def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True, early_exit:bool=False):
