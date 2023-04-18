@@ -114,23 +114,6 @@ class RPunctRecoverer:
 
         return output_segments
 
-    def process_file(self, input_path, output_file_path=None, compute_wer=False, num_rec:bool=True, strip_existing_punct:bool=True):
-        # Read input text
-        print(f"\nReading input text from file: {input_path}")
-        with open(input_path, 'r') as fp:
-            input_text = fp.read()
-
-        # Restore punctuation to plaintext using RPunct
-        punctuated = self.process_string(input_text, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
-
-        self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
-
-        if compute_wer:
-            plaintext = self.strip_punctuation(input_text)
-            self.word_error_rate(input_text, plaintext, punctuated)
-
-        return punctuated
-
     def process_items(self, input_segment:list, num_rec:bool=True, strip_existing_punct:bool=True) -> list:
         """
         Punctuation/number recovery pipeline for 1D list of Item inputs.
@@ -174,6 +157,23 @@ class RPunctRecoverer:
             output_segments.append(itemised_segment)
 
         return output_segments
+
+    def process_file(self, input_path, output_file_path=None, compute_wer=False, num_rec:bool=True, strip_existing_punct:bool=True):
+        # Read input text
+        print(f"\nReading input text from file: {input_path}")
+        with open(input_path, 'r') as fp:
+            input_text = fp.read()
+
+        # Restore punctuation to plaintext using RPunct
+        punctuated = self.process_string(input_text, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
+
+        self.output_to_file(punctuated, output_file_path)  # Output restored text (to a specified TXT file or the command line)
+
+        if compute_wer:
+            plaintext = self.strip_punctuation(input_text)
+            self.word_error_rate(input_text, plaintext, punctuated)
+
+        return punctuated
 
     def strip_punctuation(self, punctuated_text:str) -> str:
         """
@@ -233,7 +233,7 @@ class RPunctRecoverer:
         """
         Texts whether a recovered word has been comnstructured from multiple original words e.g. "fifty five" -> "55"
         """
-        return re.sub(r'[.,:;!?]', "", new_word.strip().lower()) != re.sub(r'[.,:;!?]', "", old_word.strip().lower())
+        return re.sub(r'[.,:;!?]', "", new_word.strip().lower()) != re.sub(r'[.,:;!?]', "", old_word.strip().lower()) or re.sub(r'[.,:;!?]', "", new_word).isnumeric()
 
     def itemise_segment(self, original_segment:list, recovered_segment:list) -> list:
         """
@@ -287,12 +287,11 @@ class RPunctRecoverer:
                 else:  # number recovery case
                     no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
 
-                # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]}; Recovered: {rec_word};")
+                # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]}; Recovered: {rec_word};", end='\n\n')
 
                 # Find the final word of the contraction in the orginal segments list
                 end_item = original_segment[index_orig + no_skip_words]
                 original_contents = [item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]
-                # print(f"   - Concatenated words: {original_contents}")
 
                 # Increment original segments list to jump to the end of the contracted word
                 index_orig += no_skip_words
@@ -378,7 +377,11 @@ class RPunctRecoverer:
         else:
             # Align original natural language numbers to recovered digits
             mapping = align_texts(original_segment_words, recovered_words_lst, position, early_exit=True)
-            numerical_removals = len(mapping[0][0]) - 1
+
+            if len(mapping) > 0:
+                numerical_removals = len(mapping[0][0]) - 1
+            else:
+                numerical_removals = 0
 
         return numerical_removals
 

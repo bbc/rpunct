@@ -80,7 +80,9 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
         else:  # single substitution (one-to-one)
             mapping.append([[ref], [hyp]])
 
-    mapping[0][0] = unmatched_refs + mapping[0][0]
+    if len(mapping) > 0:
+        mapping[0][0] = unmatched_refs + mapping[0][0]
+
     # print(f" - ALIGNMENT: {alignment[:min(5, len(alignment)-1)]}")
     # print(f" - MAPPING: {mapping[:min(5, len(mapping)-1)]}", end='\n\n')
 
