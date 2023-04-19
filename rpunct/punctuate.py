@@ -85,6 +85,8 @@ class RestorePuncts:
 
         # Break predictions back down into segments and apply pnctuation predictions
         segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
+        punct_text = []
+
         punct_text = [self.punctuate_texts(pred) for pred in segmented_predictions]
 
         return punct_text
@@ -229,19 +231,26 @@ class RestorePuncts:
 
             punct_resp += punct_wrd + " "
 
-        # Remove unnecessary whitespace and ensure the first word is capitalised
+        # Remove unnecessary whitespace and ensure the
         punct_resp = punct_resp.strip()
         punct_resp = punct_resp.replace("- ", "-")
-        punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
 
         # remove unwanted segmenting of numbers
         punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
-        # Ensure text ends with a terminal
-        if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
-            punct_resp += "."
-        elif punct_resp[-1] not in TERMINALS:
-            punct_resp = punct_resp[:-1] + "."
+        # Ensure the text starts with a capital and ends with a terminal
+        if len(punct_resp) > 1:
+            punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
+        else:
+            punct_resp = punct_resp.capitalize()
+
+        if len(punct_resp) > 0:
+            if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
+                punct_resp += "."
+            elif punct_resp[-1] not in TERMINALS:
+                punct_resp = punct_resp[:-1] + "."
+
+        # print(f'    > punct_resp: {punct_resp}')
 
         return punct_resp
 

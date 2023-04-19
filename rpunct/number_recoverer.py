@@ -142,9 +142,10 @@ class NumberRecoverer:
             parsed = number_parser(text)
 
         # `number_parser` adds spaces around numbers, interrupting the formatting of any trailing punctuation, so re-concatenate
-        parsed = re.sub(r"([0-9.]+)[ ]{1}([%!?,-.:;'/\\#$&'()*+\"]+)", r"\1\2", parsed)
+        parsed = re.sub(r"([£$€¥]{1}[0-9]+)[ ]{1}([0-9]{2}[!?,-.:; ]{1})", r'\1.\2', parsed)
+        parsed = re.sub(r"([0-9.]+)[ ]{1}([%!?,-.:;'$]+)", r"\1\2", parsed)
         parsed = re.sub(r'([0-9]+)[\-:]{1}([0-9]+)', r'\1\2', parsed)
-        parsed = re.sub(r"([0-9]+)[ ]{1}([.']{1})([0-9a-zA-Z]{1})$", r'\1\2\3', parsed)
+        parsed = re.sub(r"([0-9]+)[ ]{1}([.]{1}[0-9a-zA-Z]{1})$", r'\1\2', parsed)
         parsed = parsed.replace(" - ", "-")
         parsed = parsed.replace("- ", "-")
 
@@ -267,6 +268,7 @@ class NumberRecoverer:
         """
         Converts the natural language term 'pence' in text to the symbol 'p' following a monetary value.
         """
+        text = re.sub(r'([£$€¥]{1}[0-9]+[.]{1}[0-9]{2}) pence', r'\1', text)
         text = re.sub(r'([0-9]+) pence', r'\1p', text)
 
         return text
