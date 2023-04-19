@@ -34,7 +34,7 @@ class Item(object):
         self.restored_punctuation = restored_punctuation
 
 
-def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True, early_exit:bool=False):
+def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:bool=True):
     """
     Function for aligning two lists of strings denoting words in a sentence/segment.
     Used for aligning recovered texts to the original text.
@@ -68,9 +68,6 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
     unmatched_hyps = []
 
     for ref, hyp in alignment:
-        if early_exit and len(mapping) > 0 and ref != EPS and hyp != EPS:  # early exiting to speed up itemisation
-            break
-
         if ref == EPS:  # insertion (one-to-many)
             if len(mapping) > 0:
                 mapping[-1][1].append(hyp)
@@ -89,6 +86,6 @@ def align_texts(ref_text:list, hyp_text:list, start_position:int=0, strip_punct:
         mapping[0][1] = unmatched_hyps + mapping[0][1]
 
     # print(f" - ALIGNMENT: {alignment[:min(5, len(alignment)-1)]}")
-    # print(f" - MAPPING: {mapping[:min(5, len(mapping)-1)]}", end='\n\n')
+    # print(f" - MAPPING: {mapping[:min(5, len(mapping)-1)]}")
 
     return mapping

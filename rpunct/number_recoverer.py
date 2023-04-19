@@ -81,7 +81,7 @@ class NumberRecoverer:
             parsed_text = self.insert_percentage_symbols(parsed_text)
 
         # Restore decimal points
-        parsed_list = parsed_text.split(" ")
+        parsed_list = parsed_text.split()
         if self.restore_decimals:
             parsed_list = self.replace_decimal_points(parsed_list)
 
@@ -333,9 +333,11 @@ class NumberRecoverer:
         else:
             start_char = ""
 
-        if "." in number:
-            number, end_chars = number.split(".")
-            end_chars = "." + end_chars
+        if number.count(".") > 0:
+            dot_idx = number.index(".")
+            end_chars = number[dot_idx:]
+            number = number[:dot_idx]
+
         elif number[-1] == 'm':
             number, end_chars = number[:-1], 'm'
         elif number[-2:] == 'bn' or number[-2:] == 'bn':
@@ -357,7 +359,7 @@ class NumberRecoverer:
         if text.endswith(" "):
             text = text[:-1]
 
-        output_text_list = text.split(" ")
+        output_text_list = text.split()
         output = " ".join(output_text_list[:-1]) + " " + output_text_list[-1][:2] + DECADES[decade] + " "
 
         return output

@@ -261,6 +261,7 @@ class RPunctRecoverer:
         index_orig = 0
         index_rec = 0
         total_fewer_words = 0
+        output_segment = []
 
         while index_orig < len(original_segment) and index_rec < len(recovered_segment):
             # Get original and restored word from segment
@@ -275,7 +276,8 @@ class RPunctRecoverer:
 
                 if rec_word.count('-') > 0:  # hyphenation case
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
-                    no_skip_words = rec_word.count('-')
+                    orig_skip_words = rec_word.count('-')
+                    punct_skip_words = 0
 
                     # If any part of hyphenation is numerical, must also account for the words skipped due to digitisation
                     if re.sub(r"[^0-9]", "", rec_word):
@@ -284,21 +286,24 @@ class RPunctRecoverer:
 
                         for sub_index, subword_is_numeric in enumerate(numerical_subword_locations):
                             if subword_is_numeric:
-                                no_skip_words += self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=sub_index)
+                                skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:], position=sub_index)
+                                orig_skip_words += skip_words[0]
+                                punct_skip_words += skip_words[1]
 
                 else:  # number recovery case
-                    no_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
+                    orig_skip_words, punct_skip_words = self.calc_end_item_index(original_segment[index_orig:], recovered_segment[index_rec:])
 
-                # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]}; Recovered: {rec_word};", end='\n\n')
+                # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + orig_skip_words + 1]]}; Recovered: {rec_word};", end='\n\n')
 
                 # Find the final word of the contraction in the orginal segments list
-                end_item = original_segment[index_orig + no_skip_words]
+                end_item = original_segment[index_orig + orig_skip_words]
 
-                original_contents = [item.content for item in original_segment[index_orig : index_orig + no_skip_words + 1]]
+                original_contents = [item.content for item in original_segment[index_orig : index_orig + orig_skip_words + 1]]
 
                 # Increment original segments list to jump to the end of the contracted word
-                index_orig += no_skip_words
-                total_fewer_words += no_skip_words
+                index_orig += orig_skip_words
+                index_rec += punct_skip_words
+                total_fewer_words += orig_skip_words
 
             else:  # one-to-one mapping case
                 # Itemise with word & start/end times from associated original item
@@ -319,7 +324,8 @@ class RPunctRecoverer:
                 new_item.restored_punctuation = True
 
             # Return new itemised word to the segment
-            recovered_segment[index_rec] = new_item
+            # recovered_segment[index_rec] = new_item
+            output_segment.append(new_item)
             index_orig += 1
             index_rec += 1
 
@@ -342,7 +348,7 @@ class RPunctRecoverer:
         #         \n Recovered text: {[item.content for item in recovered_segment]}"
 
         # Return new itemised segment to the list of segments
-        return recovered_segment
+        return output_segment
 
     def calc_end_item_index(self, plaintext_items_lst, recovered_words_lst, position=0) -> int:
         # Generate clean list of original words
@@ -357,17 +363,22 @@ class RPunctRecoverer:
             percent_word_mask = list(map(lambda x: x == 'percent', original_segment_words))
 
             if True in percent_symbol_mask and True in percent_word_mask:
-                numerical_removals = min(percent_symbol_mask.index(True), percent_word_mask.index(True))
+                orig_text_removals = min(percent_symbol_mask.index(True), percent_word_mask.index(True))
+                punct_text_removals = 0
             elif True in percent_symbol_mask:
-                numerical_removals = percent_symbol_mask.index(True)
+                orig_text_removals = percent_symbol_mask.index(True)
+                punct_text_removals = 0
             elif True in percent_word_mask:
-                numerical_removals = percent_word_mask.index(True)
+                orig_text_removals = percent_word_mask.index(True)
+                punct_text_removals = 0
             else:
-                mapping = align_texts(original_segment_words, recovered_words_lst, position, early_exit=True)
-                numerical_removals = len(mapping[0][0]) - 1
+                mapping = align_texts(original_segment_words, recovered_words_lst, position)
+                orig_text_removals = len(mapping[0][0]) - 1
+                punct_text_removals = len(mapping[0][1]) - 1
 
         elif recovered_word.endswith('p') and not original_segment_words[0].endswith('p') and original_segment_words.count('pence') > 0:
-            numerical_removals = original_segment_words.index('pence')
+            orig_text_removals = original_segment_words.index('pence')
+            punct_text_removals = 0
 
         # elif recovered_word.startswith('£') and not original_segment_words[0].startswith('£'):
         #     numerical_removals = self.find_subword_index(['pound', 'pounds'], original_segment_words, recovered_words_lst, position)
@@ -380,14 +391,16 @@ class RPunctRecoverer:
 
         else:
             # Align original natural language numbers to recovered digits
-            mapping = align_texts(original_segment_words, recovered_words_lst, position, early_exit=True)
+            mapping = align_texts(original_segment_words, recovered_words_lst, position)
 
             if len(mapping) > 0:
-                numerical_removals = len(mapping[0][0]) - 1
+                orig_text_removals = len(mapping[0][0]) - 1
+                punct_text_removals = len(mapping[0][1]) - 1
             else:
-                numerical_removals = 0
+                orig_text_removals = 0
+                punct_text_removals = 0
 
-        return numerical_removals
+        return orig_text_removals, punct_text_removals
 
     @staticmethod
     def find_subword_index(subwords:list, orig_words:list, rec_words:list, alignment_start:int=0):
@@ -396,7 +409,7 @@ class RPunctRecoverer:
         if True in subword_mask:
             subword_index = subword_mask.index(True)
         else:
-            mapping = align_texts(orig_words, rec_words, alignment_start, early_exit=True)
+            mapping = align_texts(orig_words, rec_words, alignment_start)
             subword_index = len(mapping[0][0]) - 1
 
         return subword_index
