@@ -266,7 +266,7 @@ class RPunctRecoverer:
             if self._is_changed_word(rec_word, orig_item.content):
                 # print(f" > Original: {orig_item.content}; Recovered: {rec_word};", end='\r')
 
-                if rec_word.count('-') > 0:  # hyphenation case
+                if rec_word.count('-') > 0 and index_rec != len(recovered_segment) - 1:  # hyphenation case
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
                     orig_skip_words = rec_word.count('-')
                     punct_skip_words = 0
@@ -288,7 +288,13 @@ class RPunctRecoverer:
                 # print(f" > Original: {[item.content for item in original_segment[index_orig : index_orig + orig_skip_words + 1]]}; Recovered: {rec_word};", end='\n\n')
 
                 # Find the final word of the contraction in the orginal segments list
-                end_item = original_segment[index_orig + orig_skip_words]
+                try:
+                    end_item = original_segment[index_orig + orig_skip_words]
+                except IndexError:
+                    print([i.content for i in original_segment])
+                    print(recovered_segment)
+                    print(f"Index orig: {index_orig}, skip words: {orig_skip_words}")
+                    exit(1)
 
                 original_contents = [item.content for item in original_segment[index_orig : index_orig + orig_skip_words + 1]]
 
