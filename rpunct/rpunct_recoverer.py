@@ -110,7 +110,7 @@ class RPunctRecoverer:
             num_recovered = text_segments
 
         # Recover punctuation of each segment of items individually
-        output_segments = self.recoverer.punctuate_segments(num_recovered)
+        output_segments = self.recoverer.punctuate_segments(num_recovered, strict_sentence_boundaries=False)
 
         return output_segments
 
@@ -249,14 +249,6 @@ class RPunctRecoverer:
         Need to recompute timing information on a per-word level for each segment as some words may have been concatenated by hyphenation,
         changing their end time.
         """
-        # Capitalise the first word of every segment
-        recovered_segment[0] = recovered_segment[0].capitalize()
-
-        # Make the last word of a segment a full stop if no punctuation present
-        last_word = recovered_segment[-1]
-        if last_word[-1] not in string.punctuation:
-            recovered_segment[-1] = last_word + '.'
-
         # Itemise segment words (taking into account that recovered segment may be fewer words due to hyphenation)
         index_orig = 0
         index_rec = 0

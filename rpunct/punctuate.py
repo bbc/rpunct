@@ -45,7 +45,9 @@ class RestorePuncts:
                 }
             )
 
-    def punctuate(self, text:str):
+        self._memory_buffer = ""
+
+    def punctuate(self, text:str, strict_sentence_boundaries:bool=True):
         """
         Performs punctuation restoration on plaintext (in English only).
 
@@ -59,12 +61,11 @@ class RestorePuncts:
         model_segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
         preds_lst = self.predict(model_segments)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
-        punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
+        punct_text = self.punctuate_texts(combined_preds, strict_sentence_boundaries)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def punctuate_segments(self, segments:list):
-
+    def punctuate_segments(self, segments:list, strict_sentence_boundaries:bool=True):
         # Define segment boundaries s.t. they can be restored after being fed through the model
         segment_lengths = [len(s.split()) for s in segments]
         segment_boundaries = [(0, 0)]
@@ -87,7 +88,7 @@ class RestorePuncts:
         segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
         punct_text = []
 
-        punct_text = [self.punctuate_texts(pred) for pred in segmented_predictions]
+        punct_text = [self.punctuate_texts(pred, strict_sentence_boundaries) for pred in segmented_predictions]
 
         return punct_text
 
@@ -185,7 +186,7 @@ class RestorePuncts:
 
         return output_text
 
-    def punctuate_texts(self, full_pred:list):
+    def punctuate_texts(self, full_pred:list, strict_sentence_boundaries:bool=True):
         """
         Given a list of predictions from the model, applies the predictions to the plaintext, restoring full punctuation and capitalisation.
         """
@@ -222,7 +223,7 @@ class RestorePuncts:
                 raise ValueError(f"Invalid capitalisation label: '{label[-1]}'")
 
             # Ensure terminals are followed by capitals
-            if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
+            if (len(punct_resp) > 1 and punct_resp[-2] in TERMINALS) or (punct_resp == "" and self._memory_buffer != "" and self._memory_buffer[-1] in TERMINALS):
                 punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
@@ -239,18 +240,19 @@ class RestorePuncts:
         punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
         # Ensure the text starts with a capital and ends with a terminal
-        if len(punct_resp) > 1:
-            punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
-        else:
-            punct_resp = punct_resp.capitalize()
+        if strict_sentence_boundaries:
+            if len(punct_resp) > 1:
+                punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
+            else:
+                punct_resp = punct_resp.capitalize()
 
-        if len(punct_resp) > 0:
-            if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
-                punct_resp += "."
-            elif punct_resp[-1] not in TERMINALS:
-                punct_resp = punct_resp[:-1] + "."
+            if len(punct_resp) > 0:
+                if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
+                    punct_resp += "."
+                elif punct_resp[-1] not in TERMINALS:
+                    punct_resp = punct_resp[:-1] + "."
 
-        # print(f'    > punct_resp: {punct_resp}')
+        self._memory_buffer = punct_resp  # Save response for reference in next pass (to check if ends in a terminal and enforce capitalisation)
 
         return punct_resp
 
