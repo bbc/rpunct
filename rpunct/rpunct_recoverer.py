@@ -266,7 +266,7 @@ class RPunctRecoverer:
             if self._is_changed_word(rec_word, orig_item.content):
                 # print(f" > Original: {orig_item.content}; Recovered: {rec_word};", end='\r')
 
-                if rec_word.count('-') > 0 and index_rec != len(recovered_segment) - 1:  # hyphenation case
+                if rec_word.count('-') > 0 and index_orig != len(original_segment) - 1:  # hyphenation case
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
                     orig_skip_words = rec_word.count('-')
                     punct_skip_words = 0
