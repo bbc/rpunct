@@ -3,6 +3,7 @@ venv/
 ~/tensorflow_datasets/
 runs/
 outputs/
+model-files/
 cache_dir/
 training/__pycache__/
 training/datasets/
@@ -20,3 +21,6 @@ label-distributions/
 rpunct/itemising.py
 test_run_rpunct.py
 punctuate_whisper_segments.py
+*.json
+bbc-data-access.py
+punctuate-whisper-file.py

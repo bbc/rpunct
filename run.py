@@ -193,8 +193,8 @@ punct_parser.add_argument(
     metavar='MODEL',
     action='store',
     type=str,
-    default='outputs/best_model',
-    help="Specify the model to be used to generate punctuations (by giving the path to its parameterisation) - default uses model params in directory `outputs/best_model`."
+    default='model-files',
+    help="Specify the model to be used to generate punctuations (by giving the path to its parameterisation) - default uses model params in directory `model-files`."
 )
 
 punct_parser.add_argument(
@@ -244,7 +244,7 @@ if __name__ == "__main__":
     if args.stage == 'rpunct':
         # Generate instance of RPunct model and use to punctuate input (rpunct_recoverer.py)
         punct_model = RPunctRecoverer(model_location=args.model, use_cuda=args.gpu)
-        output = punct_model.run(args.input, args.output, compute_wer=args.wer)
+        output = punct_model.process_file(args.input, args.output, compute_wer=args.wer)
 
     # Data preparation stage
     elif args.stage == 'data':

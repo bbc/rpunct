@@ -8,6 +8,7 @@ import re
 import os
 import json
 import warnings
+from time import time
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
@@ -44,7 +45,9 @@ class RestorePuncts:
                 }
             )
 
-    def punctuate(self, text:str):
+        self._memory_buffer = ""
+
+    def punctuate(self, text:str, strict_sentence_boundaries:bool=True):
         """
         Performs punctuation restoration on plaintext (in English only).
 
@@ -55,29 +58,57 @@ class RestorePuncts:
             - punct_text (str): fully punctuated output text.
         """
         # Restoration pipeline
-        segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
-        preds_lst = self.predict(segments)  # Generate word-level punctuation predictions
+        model_segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
+        preds_lst = self.predict(model_segments)  # Generate word-level punctuation predictions
         combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
-        punct_text = self.punctuate_texts(combined_preds)  # Apply the punctuation predictions to the text
+        punct_text = self.punctuate_texts(combined_preds, strict_sentence_boundaries)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def predict(self, input_segments, silent:bool=True):
+    def punctuate_segments(self, segments:list, strict_sentence_boundaries:bool=True):
+        # Define segment boundaries s.t. they can be restored after being fed through the model
+        segment_lengths = [len(s.split()) for s in segments]
+        segment_boundaries = [(0, 0)]
+
+        for length in segment_lengths:
+            start_idx = segment_boundaries[-1][1]
+            end_idx = start_idx + length
+            segment_boundaries.append((start_idx, end_idx))
+
+        segment_boundaries = segment_boundaries[1:]
+
+        # Make predictions over entire concatenated text
+        text_block = " ".join(segments)
+        model_segments = self.segment_text_blocks(text_block)
+
+        predictions = self.predict(model_segments)
+        combined_predictions = self.combine_results(predictions, text_block)
+
+        # Break predictions back down into segments and apply pnctuation predictions
+        segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
+        punct_text = []
+        punct_text = [self.punctuate_texts(pred, strict_sentence_boundaries) for pred in segmented_predictions]
+
+        # Always enforce strict sentence boundaries on first and last segment
+        punct_text[0] = punct_text[0][0].capitalize() + punct_text[0][1:]
+
+        if punct_text[-1][-1] not in TERMINALS:
+            if punct_text[-1][-1].isalnum() or punct_text[-1][-1] in ['%', "'"]:
+                punct_text[-1] += '.'
+            else:
+                punct_text[-1] = punct_text[-1][:-1] + '.'
+
+        return punct_text
+
+    def predict(self, input_segments):
         """
         Passes the unpunctuated text to the model for punctuation.
         """
-        predictions = []
+        text_segments = [i['text'] for i in input_segments]
+        predictions = self.model.predict(text_segments)
+        predicted_segments = predictions[0]
 
-        if silent:
-            I = input_segments
-        else:
-            I = tqdm(input_segments)
-            I.set_description("Punctuating text segments")
-
-        for i in I:
-            predictions.append(self.model.predict([i['text']])[0][0])
-
-        return predictions
+        return predicted_segments
 
     @staticmethod
     def segment_text_blocks(text:str, length:int=250, overlap:int=30):
@@ -94,7 +125,9 @@ class RestorePuncts:
             - resp (lst): list of dicts specifying each text segment (containing the text and its start/end indices).
             E.g. [{...}, {"text": "...", 'start_idx': 31354, 'end_idx': 32648}, {...}]
         """
-        wrds = text.replace('\n', ' ').split(" ")
+        text = text.replace('\n', ' ')
+        wrds = text.split()
+
         resp = []
         lst_chunk_idx = 0
         i = 0
@@ -161,15 +194,13 @@ class RestorePuncts:
                     pred_item_tuple = list(wrd.items())[0]
                     output_text.append(pred_item_tuple)
 
-        # Validate that the output text content (without predictions) is the same as the full plain text
-        assert [i[0] for i in output_text] == original_text_lst
         return output_text
 
-    def punctuate_texts(self, full_pred:list):
+    def punctuate_texts(self, full_pred:list, strict_sentence_boundaries:bool=True):
         """
         Given a list of predictions from the model, applies the predictions to the plaintext, restoring full punctuation and capitalisation.
         """
-        valid_punctuation = [p for p in PUNCT_LABELS if p not in ["O", "'"]]
+        valid_punctuation = [p for p in PUNCT_LABELS if p not in ["O", "'", "%"]]
         punct_resp = ""
 
         # Cycle through the list containing each word and its predicted label
@@ -202,7 +233,7 @@ class RestorePuncts:
                 raise ValueError(f"Invalid capitalisation label: '{label[-1]}'")
 
             # Ensure terminals are followed by capitals
-            if len(punct_resp) > 1 and punct_resp[-2] in TERMINALS:
+            if (len(punct_resp) > 1 and punct_resp[-2] in TERMINALS) or (punct_resp == "" and self._memory_buffer != "" and self._memory_buffer[-1] in TERMINALS):
                 punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
@@ -211,19 +242,28 @@ class RestorePuncts:
 
             punct_resp += punct_wrd + " "
 
-        # Remove unnecessary whitespace and ensure the first word is capitalised
+        # Remove unnecessary whitespace and ensure the
         punct_resp = punct_resp.strip()
         punct_resp = punct_resp.replace("- ", "-")
-        punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
+        punct_resp = re.sub(r'[-]{1}([£$€¥]{1})', r' \1', punct_resp)
 
         # remove unwanted segmenting of numbers
         punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
 
-        # Ensure text ends with a terminal
-        if punct_resp[-1].isalnum():
-            punct_resp += "."
-        elif punct_resp[-1] not in TERMINALS:
-            punct_resp = punct_resp[:-1] + "."
+        # Ensure the text starts with a capital and ends with a terminal
+        if strict_sentence_boundaries:
+            if len(punct_resp) > 1:
+                punct_resp = punct_resp[0].capitalize() + punct_resp[1:]
+            else:
+                punct_resp = punct_resp.capitalize()
+
+            if len(punct_resp) > 0:
+                if punct_resp[-1].isalnum() or punct_resp[-1] in ['%', "'"]:
+                    punct_resp += "."
+                elif punct_resp[-1] not in TERMINALS:
+                    punct_resp = punct_resp[:-1] + "."
+
+        self._memory_buffer = punct_resp  # Save response for reference in next pass (to check if ends in a terminal and enforce capitalisation)
 
         return punct_resp
 
@@ -256,51 +296,3 @@ class RestorePuncts:
             correct_capitalisation = plaintext.upper()
 
         return correct_capitalisation
-
-
-def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False):
-    """
-    Pipeline that constructs an RPunct model to conduct punctuation restoration over an input file of plaintext.
-    """
-    # Generate an RPunct model instance
-    punct_model = RestorePuncts(model_source=model_location, use_cuda=use_cuda)
-
-    # Read input text
-    print(f"\nReading plaintext from file: {input_txt}")
-    with open(input_txt, 'r') as fp:
-        unpunct_text = fp.read()
-
-    # Restore punctuation to plaintext using RPunct
-    punctuated = punct_model.punctuate(unpunct_text)
-
-    # Output restored text
-    if output_path is not None:
-        # print output to command line
-        print("\nPrinting punctuated text", end='\n\n')
-        print(punctuated)
-    else:
-        # Check if output directory exists
-        output_dir, _ = os.path.split(output_path)
-        output_path_exists = os.path.isdir(output_dir)
-
-        # print punctuated text to output file
-        if output_path_exists:
-            print(f"Writing punctuated text to file: {output_path}")
-            with open(output_path, 'w') as fp:
-                fp.write(punctuated)
-        else:
-            raise FileNotFoundError(f"Directory specified to ouptut text file to does not exist: {output_dir}")
-
-
-if __name__ == "__main__":
-    model = 'outputs/comp-perc-1e/'
-    cuda = False
-    input = 'tests/inferences/full-ep/test.txt'
-    output = 'output.txt'
-
-    run_rpunct(
-        model_location=model,
-        input_txt=input,
-        output_txt=output,
-        use_cuda=cuda
-    )

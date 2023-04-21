@@ -235,8 +235,9 @@ def create_record(text, mixed_casing=False):
                     mixed_case.update({stripped_obs.lower(): stripped_obs})
 
         # Add the word and its label to the dataset
-        # N.B. apostrophes (') and percentages (%) are preserved in the dataset
-        new_obs.append({'sentence_id': 0, 'words': re.sub(r"[^0-9a-zA-Z'%]", "", obs).lower(), 'labels': new_lab})
+        # N.B. some punctuation is retained in label word (any thats restored by `number_recoverer` not the model: e.g. %, £, etc.)
+        partially_stripped_obs = re.sub(r"[^0-9a-zA-Z'%£$€¥]", "", obs).lower()
+        new_obs.append({'sentence_id': 0, 'words': partially_stripped_obs, 'labels': new_lab})
 
     return new_obs, mixed_case
 
@@ -507,7 +508,7 @@ def get_label_stats(dataset):
             distribution['lower'] += label_count
 
     for capi_punct_status in distribution.keys():
-        distribution[capi_punct_status] = round((distribution[capi_punct_status] / total_items) * 100, 2)
+        distribution[capi_punct_status] = (distribution[capi_punct_status] / total_items) * 100
 
     output = pd.DataFrame.from_dict(distribution, orient='index', columns=['Proportion (%)'])
 
