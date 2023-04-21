@@ -32,25 +32,28 @@ List of text featured available for recovery:
 ## Usage:
 
 1. Pull the model files from bbc-data:
-   > `bbc-data pull bbc/speech/transcription/bbc-punctuator:0.0.1`
-   >
+   `bbc-data pull bbc/rpunct:0.0.1`
 2. Install the BBC Punctuator system from Git:
-   > `git clone git@github.com:bbc/rpunct.git`
-   > `cd rpunct`
-   >
+   `git clone git@github.com:bbc/rpunct.git`
+   `cd rpunct`
+   `pip install -r requirements.txt`
 3. Move the model files to the reference location within bbc-punctuator:
-   > `mv $(bbc-data path bbc/speech/transcription/bbc-punctuator) model-files`
-   >
+   `mv $(bbc-data path bbc/rpunct) model-files`
 4. Run the BBC Punctuator by pointing the run file to the model files (from inside the cloned repo):
+
    1. To punctuate a plaintext (.txt) file from the command line:
-      > `python run.py rpunct -m model-files -i input_file_path.txt -o output_file_path.txt`
-      >
-   2. To use bbc-punctuator within a python script:
+      `python run.py rpunct -m model-files -i input_file_path.txt -o output_file_path.txt`
+   2. To use bbc-punctuator within a python script (from within the `rpunct`
+      directory):
+
       ```
       from rpunct.rpunct_recoverer import RPunctRecoverer
 
       punctuator = RPunctRecoverer()
-      text = 'hello and welcome to the bbc punctuator this is an example piece of plaintext that exhibits no punctuation or capitalisation'
+      text = 'hello and welcome to the bbc punctuator \
+      this is an example piece of plaintext \
+      that exhibits no punctuation or capitalisation'
+
       punctuated_text = punctuator.process(text)
       ```
 
@@ -70,4 +73,6 @@ List of text featured available for recovery:
 ## Authors
 
 * **Tom Potter** <tom.potter@bbc.co.uk>
-* **Daulet Nurmanbetov** <daulet.nurmanbetov@gmail.com> (developer of the original system [rpunct]() upon which bbc-punctuator is based)
+* **Daulet Nurmanbetov** <daulet.nurmanbetov@gmail.com> (developer of the original
+  system [rpunct](https://github.com/Felflare/rpunct) upon which bbc-punctuator is
+  based)
