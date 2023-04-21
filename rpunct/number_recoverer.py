@@ -4,7 +4,6 @@
 Module supporting punctuation recovery and post-processing of raw STT output.
 """
 import re
-import string
 from num2words import num2words
 from number_parser import parse as number_parser, parse_number as individual_number_parser
 import decimal
@@ -273,7 +272,6 @@ class NumberRecoverer:
 
         return text
 
-
     @staticmethod
     def insert_percentage_symbols(text):
         """
@@ -323,7 +321,7 @@ class NumberRecoverer:
         Inserts comma separators into numbers with many digits to break up 1000s (e.g. '100000' -> '100,000').
         """
         # Skip if contains pre-existing punctuation
-        if ',' in number:
+        if number.count(',') > 0:
             return number + " "
 
         # Strip leading non-numeric characters and trailing digits after the decimal point in floats
@@ -333,7 +331,7 @@ class NumberRecoverer:
         else:
             start_char = ""
 
-        if number.count(".") > 0:
+        if number.count('.') > 0:
             dot_idx = number.index(".")
             end_chars = number[dot_idx:]
             number = number[:dot_idx]
@@ -347,7 +345,7 @@ class NumberRecoverer:
 
         # Cycle through number in reverse order and insert comma separators every three digits
         for i in range(len(number) - 3, 0, -3):
-            number = number[:i] + "," + number[i:]
+            number = number[:i] + ',' + number[i:]
 
         # Reconcatenate leading/trailing chars/digits
         number = start_char + number + end_chars + " "
@@ -356,9 +354,7 @@ class NumberRecoverer:
 
     @staticmethod
     def decades_to_digits(text, decade):
-        if text.endswith(" "):
-            text = text[:-1]
-
+        text = text.strip()
         output_text_list = text.split()
         output = " ".join(output_text_list[:-1]) + " " + output_text_list[-1][:2] + DECADES[decade] + " "
 

@@ -1,75 +1,73 @@
-# ✏️ rpunct - Restore Punctuation
-[![forthebadge](https://forthebadge.com/images/badges/made-with-crayons.svg)]()
+# bbc-punctuator
 
-This repo contains code for Punctuation restoration.
+This is the BBC Punctuator, developed by BBC R&D's Speech-to-Text team. BBC Punctuator is a machine learning model for restoring punctuation and capitalisation into plaintext, such as raw transcripts produced by STT systems.
 
-This package is intended for direct use as a punctuation restoration model for the general English language. Alternatively, you can use this for further fine-tuning on domain-specific texts for punctuation restoration tasks.
-It uses HuggingFace's `bert-base-uncased` model weights that have been fine-tuned for Punctuation restoration.
+The model uses HuggingFace's `bert-base-uncased` model weights that have been fine-tuned for Punctuation restoration for one epoch over a new BBC built composite punctuator training dataset, composed of BBC News articles (written between 2020-2), BBC News transcripts, and subtitles from a range of BBC TV programmes [*model=composite20v3-1e*]. The parameters learned over this training process are stored in bbc-data (*bbc/speech/transcription/bbc-punctuator:0.0.1*), which when referenced from this code make a complete system for punctuating text.
 
-Punctuation restoration works on arbitrarily large text.
-And uses GPU if it's available otherwise will default to CPU.
+The system utilises the CPU by default but can be instructed to run on a GPU.
 
-List of punctuations we restore:
-* Upper-casing
-* Period: **.**  
-* Exclamation: **!** 
-* Question Mark: **?** 
-* Comma:  **,** 
-* Colon:  **:** 
-* Semi-colon: **;** 
-* Apostrophe: **'** 
-* Dash: **-** 
+List of text featured available for recovery:
 
----------------------------
-## 🚀 Usage
-**Below is a quick way to get up and running with the model.**
-1. First, install the package.
-```bash
-pip install rpunct
-```
-2. Sample python code.
-```python
-from rpunct import RestorePuncts
-# The default language is 'english'
-rpunct = RestorePuncts()
-rpunct.punctuate("""in 2018 cornell researchers built a high-powered detector that in combination with an algorithm-driven process called ptychography set a world record
-by tripling the resolution of a state-of-the-art electron microscope as successful as it was that approach had a weakness it only worked with ultrathin samples that were
-a few atoms thick anything thicker would cause the electrons to scatter in ways that could not be disentangled now a team again led by david muller the samuel b eckert
-professor of engineering has bested its own record by a factor of two with an electron microscope pixel array detector empad that incorporates even more sophisticated
-3d reconstruction algorithms the resolution is so fine-tuned the only blurring that remains is the thermal jiggling of the atoms themselves""")
-# Outputs the following:
-# In 2018, Cornell researchers built a high-powered detector that, in combination with an algorithm-driven process called Ptychography, set a world record by tripling the
-# resolution of a state-of-the-art electron microscope. As successful as it was, that approach had a weakness. It only worked with ultrathin samples that were a few atoms
-# thick. Anything thicker would cause the electrons to scatter in ways that could not be disentangled. Now, a team again led by David Muller, the Samuel B. 
-# Eckert Professor of Engineering, has bested its own record by a factor of two with an Electron microscope pixel array detector empad that incorporates even more
-# sophisticated 3d reconstruction algorithms. The resolution is so fine-tuned the only blurring that remains is the thermal jiggling of the atoms themselves.
-```
+* Capitalisation:
+  * Capitalisaton
+  * Acronyms (upper-casing)
+  * Mixed-casing
+* Punctuation:
+  * Period: **.**
+  * Comma:  **,**
+  * Question Mark: **?**
+  * Exclamation: **!**
+  * Colon:  **:**
+  * Semi-colon: **;**
+  * Apostrophe: **'**
+  * Hypen: **-**
+* Numbers:
+  * Digitising natural language numbers
+  * Currencies: **£**, **$**, **€**, **¥**
+  * Percentages: **%**
+  * Ordinals
+  * Decimals
+  * Dates (years/decades)
 
------------------------------------------------
-## 🎯 Accuracy
-Here is the number of product reviews we used for finetuning the model:
+## Usage:
 
-| Language | Number of text samples|
-| -------- | ----------------- |
-| English  | 560,000           |
+1. Pull the model files from bbc-data:
+   > `bbc-data pull bbc/speech/transcription/bbc-punctuator:0.0.1`
+   >
+2. Install the BBC Punctuator system from Git:
+   > `git clone git@github.com:bbc/rpunct.git`
+   > `cd rpunct`
+   >
+3. Move the model files to the reference location within bbc-punctuator:
+   > `mv $(bbc-data path bbc/speech/transcription/bbc-punctuator) model-files`
+   >
+4. Run the BBC Punctuator by pointing the run file to the model files (from inside the cloned repo):
+   1. To punctuate a plaintext (.txt) file from the command line:
+      > `python run.py rpunct -m model-files -i input_file_path.txt -o output_file_path.txt`
+      >
+   2. To use bbc-punctuator within a python script:
+      ```
+      from rpunct.rpunct_recoverer import RPunctRecoverer
 
-We found the best convergence around _**3 epochs**_, which is what presented here and available via a download.
+      punctuator = RPunctRecoverer()
+      text = 'hello and welcome to the bbc punctuator this is an example piece of plaintext that exhibits no punctuation or capitalisation'
+      punctuated_text = punctuator.process(text)
+      ```
 
------------------------------------------------
-The fine-tuned model obtained the following accuracy on 45,990 held-out text samples:
+## Performance
 
-| Accuracy | Overall F1 | Eval Support |
-| -------- | ---------------------- | ------------------- |
-| 91%  | 90%                 | 45,990
+| Metric         | Prec   | Recall | F1     |
+| -------------- | ------ | ------ | ------ |
+| abbreviations  | 0.9377 | 0.8605 | 0.8974 |
+| capitalisation | 0.9213 | 0.9434 | 0.9322 |
+| commas         | 0.6977 | 0.7029 | 0.7003 |
+| hyphens        | 0.7198 | 0.8953 | 0.7980 |
+| numbers        | 0.7499 | 0.7747 | 0.7621 |
+| sentences      | 0.8351 | 0.8762 | 0.8552 |
+| fullstops      | 0.8110 | 0.8710 | 0.8399 |
+| questions      | 0.7537 | 0.4770 | 0.5843 |
 
------------------------------------------------
-## 💻🎯 Further Fine-Tuning
+## Authors
 
-To start fine-tuning or training please look into `training/train.py` file.
-Running `python training/train.py` will replicate the results of this model.
-
------------------------------------------------
-## ☕ Contact 
-Contact [Daulet Nurmanbetov](daulet.nurmanbetov@gmail.com) for questions, feedback and/or requests for similar models.
-
------------------------------------------------
+* **Tom Potter** <tom.potter@bbc.co.uk>
+* **Daulet Nurmanbetov** <daulet.nurmanbetov@gmail.com> (developer of the original system [rpunct]() upon which bbc-punctuator is based)

@@ -193,8 +193,8 @@ punct_parser.add_argument(
     metavar='MODEL',
     action='store',
     type=str,
-    default='outputs/best_model',
-    help="Specify the model to be used to generate punctuations (by giving the path to its parameterisation) - default uses model params in directory `outputs/best_model`."
+    default='model-files',
+    help="Specify the model to be used to generate punctuations (by giving the path to its parameterisation) - default uses model params in directory `model-files`."
 )
 
 punct_parser.add_argument(

@@ -12,7 +12,6 @@ class Item(object):
     Class representing an item in a transcript.
 
     """
-
     def __init__(self, start_time, end_time, content, original_content=None, likelihood=1, restored_punctuation=False):
         """
         Constructor.
@@ -25,10 +24,9 @@ class Item(object):
             likelihood: The predicted probability of a word (only applicable in STT systems like Whisper)
 
         """
-
         self.start_time = round(float(start_time), 3)
         self.end_time = round(float(end_time), 3)
-        self.content = content.strip()
+        self.content = content
         self.original_content = original_content
         self.likelihood = likelihood
         self.restored_punctuation = restored_punctuation

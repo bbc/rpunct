@@ -6,9 +6,7 @@ Module supporting punctuation recovery and post-processing of raw STT output.
 import re
 import os
 import torch
-import string
 import decimal
-from tqdm import tqdm
 from jiwer import wer
 from num2words import num2words
 
@@ -26,12 +24,16 @@ class RPunctRecoverer:
     """
     A class for loading the RPunct object and exposing it to linguine code.
     """
-    def __init__(self, model_location, use_cuda=True):
-            self.recoverer = RestorePuncts(
-                model_source=model_location,
-                use_cuda=(use_cuda and torch.cuda.is_available())
-            )
-            self.number_recoverer = NumberRecoverer()
+    def __init__(self, model_location='model-files', use_cuda=True):
+
+            if os.path.isdir(model_location):
+                self.recoverer = RestorePuncts(
+                    model_source=model_location,
+                    use_cuda=(use_cuda and torch.cuda.is_available())
+                )
+                self.number_recoverer = NumberRecoverer()
+            else:
+                raise FileNotFoundError(f'Could not find required model files at given location: `{model_location}`.')
 
     def process(self, input_transcript, conduct_number_recovery:bool=True, strip_existing_punct:bool=True):
         """
@@ -75,11 +77,8 @@ class RPunctRecoverer:
             transcript: Single string transcript to conduct punctuation/number recovery on.
         """
         # Conduct number recovery process on segment transcript via NumberRecoverer
-        if strip_existing_punct:
-            transcript = self.strip_punctuation(transcript)
-            # print('\nPlaintext: \n', transcript)
-        else:
-            transcript = transcript.replace("-", " ")
+        transcript = self.strip_punctuation(transcript, strip_all=strip_existing_punct)
+        # print('\nPlaintext: \n', transcript)
 
         if num_rec:
             transcript = self.number_recoverer.process(transcript)
@@ -98,10 +97,7 @@ class RPunctRecoverer:
             input_segments: List of string transcripts to conduct punctuation/number recovery on.
         """
         # Convert list of items into list of words
-        if strip_existing_punct:
-            text_segments = [self.strip_punctuation(segment) for segment in input_segments]
-        else:
-            text_segments = [segment.replace("-", " ").strip() for segment in input_segments]
+        text_segments = [self.strip_punctuation(segment, strip_existing_punct) for segment in input_segments]
 
         # Recover number representations over each segmente individually
         if num_rec:
@@ -120,11 +116,7 @@ class RPunctRecoverer:
         """
         # Extract list of words from list and convert into string sentence
         transcript = ' '.join([item.content.strip() for item in input_segment]).strip()
-
-        if strip_existing_punct:
-            transcript = self.strip_punctuation(transcript)
-        else:
-            transcript = transcript.replace("-", " ")
+        transcript = self.strip_punctuation(transcript, strip_all=strip_existing_punct)
 
         # Conduct number recovery process on segment transcript via NumberRecoverer
         if num_rec:
@@ -136,7 +128,7 @@ class RPunctRecoverer:
         recovered = self.recoverer.punctuate(recovered)
 
         # Format recovered transcript back into list of segments
-        recovered_words = recovered.split(' ')
+        recovered_words = recovered.split()
         recovered_segment = self.itemise_segment(input_segment, recovered_words)
 
         return recovered_segment
@@ -146,7 +138,7 @@ class RPunctRecoverer:
         Punctuation/number recovery pipeline for (2D list of) segmented Item inputs.
         """
         # Convert list of items into list of strings and punctuate
-        text_segments = [' '.join([item.content.strip() for item in segment]) for segment in input_segments]
+        text_segments = [''.join([item.content for item in segment]) for segment in input_segments]
         predicted_segments = self.process_string_segments(text_segments, num_rec=num_rec, strip_existing_punct=strip_existing_punct)
         recovered_segments = []
 
@@ -183,19 +175,27 @@ class RPunctRecoverer:
 
         return punctuated
 
-    def strip_punctuation(self, punctuated_text:str) -> str:
+    def strip_punctuation(self, text:str, strip_all:bool=True) -> str:
         """
         Converts a string of punctuated text to plaintext with no punctuation or capitalisation and only natural language numbers.
         """
-        # set lowercase and replace certain characters
-        text = punctuated_text.lower()
+        # Convert acronyms separated by dots (e.g. 'B.B.C.' -> 'BBC')
+        text = re.sub(r'([a-zA-Z]{1})\.([a-zA-Z]{1})\.([a-zA-Z]{1})\.([,?!:;\- ])', r'\1\2\3\4', text)
+        text = re.sub(r'([a-zA-Z]{1})\.([a-zA-Z]{1})\.([,?!:;\- ])', r'\1\2\3', text)
+
+        # Generic text replacements required in all files
         text = text.replace("\n", " ")
         text = text.replace(" - ", " ")
         text = text.replace("-", " ")
-        text = text.replace("%", " percent")
         text = text.strip()
 
-        text = text.split(" ")
+        if not strip_all:
+            return text
+
+        # set lowercase and replace certain characters
+        text = text.lower()
+        text = text.replace("%", " percent")
+        text = text.split()
         plaintext = []
 
         for word in text:
@@ -260,11 +260,11 @@ class RPunctRecoverer:
             orig_item = original_segment[index_orig]
             rec_word = recovered_segment[index_rec]
 
-            # print(f" * Original: {orig_item.content}; Recovered: {rec_word};")
+            # print(f" * Original: '{orig_item.content}'; Recovered: '{rec_word}';")
 
             # Create item object per recovered word including correct time codes
             if self._is_changed_word(rec_word, orig_item.content):
-                # print(f" > Original: {orig_item.content}; Recovered: {rec_word};", end='\r')
+                # print(f" > Original: '{orig_item.content}'; Recovered: '{rec_word}';", end='\r')
 
                 if rec_word.count('-') > 0:  # hyphenation case
                     # The no. of words skipped over in the orginal segment list equals the no. concatenated onto the leftmost word of the hyphenation
@@ -305,9 +305,12 @@ class RPunctRecoverer:
                 end_item = orig_item
                 original_contents = None
 
-                # print(f" * Original: {orig_item.content}; Recovered: {rec_word};")
+                # print(f" * Original: '{orig_item.content}'; Recovered: '{rec_word}';")
 
             # Itemise with word & start/end times from 1st/last word of the hyphenation
+            if orig_item.content.startswith(" "):
+                rec_word = " " + rec_word
+
             new_item = Item(
                 orig_item.start_time, end_item.end_time,
                 rec_word, original_contents,

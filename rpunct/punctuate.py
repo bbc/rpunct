@@ -87,8 +87,16 @@ class RestorePuncts:
         # Break predictions back down into segments and apply pnctuation predictions
         segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
         punct_text = []
-
         punct_text = [self.punctuate_texts(pred, strict_sentence_boundaries) for pred in segmented_predictions]
+
+        # Always enforce strict sentence boundaries on first and last segment
+        punct_text[0] = punct_text[0][0].capitalize() + punct_text[0][1:]
+
+        if punct_text[-1][-1] not in TERMINALS:
+            if punct_text[-1][-1].isalnum() or punct_text[-1][-1] in ['%', "'"]:
+                punct_text[-1] += '.'
+            else:
+                punct_text[-1] = punct_text[-1][:-1] + '.'
 
         return punct_text
 
@@ -117,7 +125,9 @@ class RestorePuncts:
             - resp (lst): list of dicts specifying each text segment (containing the text and its start/end indices).
             E.g. [{...}, {"text": "...", 'start_idx': 31354, 'end_idx': 32648}, {...}]
         """
-        wrds = text.replace('\n', ' ').split(" ")
+        text = text.replace('\n', ' ')
+        wrds = text.split()
+
         resp = []
         lst_chunk_idx = 0
         i = 0
@@ -235,6 +245,7 @@ class RestorePuncts:
         # Remove unnecessary whitespace and ensure the
         punct_resp = punct_resp.strip()
         punct_resp = punct_resp.replace("- ", "-")
+        punct_resp = re.sub(r'[-]{1}([£$€¥]{1})', r' \1', punct_resp)
 
         # remove unwanted segmenting of numbers
         punct_resp = re.sub(r"([0-9]+)[\-:; ]([0-9]+)", r'\1\2', punct_resp)
@@ -285,51 +296,3 @@ class RestorePuncts:
             correct_capitalisation = plaintext.upper()
 
         return correct_capitalisation
-
-
-def run_rpunct(model_location, input_txt, output_path=None, use_cuda:bool=False):
-    """
-    Pipeline that constructs an RPunct model to conduct punctuation restoration over an input file of plaintext.
-    """
-    # Generate an RPunct model instance
-    punct_model = RestorePuncts(model_source=model_location, use_cuda=use_cuda)
-
-    # Read input text
-    print(f"\nReading plaintext from file: {input_txt}")
-    with open(input_txt, 'r') as fp:
-        unpunct_text = fp.read()
-
-    # Restore punctuation to plaintext using RPunct
-    punctuated = punct_model.punctuate(unpunct_text)
-
-    # Output restored text
-    if output_path is not None:
-        # print output to command line
-        print("\nPrinting punctuated text", end='\n\n')
-        print(punctuated)
-    else:
-        # Check if output directory exists
-        output_dir, _ = os.path.split(output_path)
-        output_path_exists = os.path.isdir(output_dir)
-
-        # print punctuated text to output file
-        if output_path_exists:
-            print(f"Writing punctuated text to file: {output_path}")
-            with open(output_path, 'w') as fp:
-                fp.write(punctuated)
-        else:
-            raise FileNotFoundError(f"Directory specified to ouptut text file to does not exist: {output_dir}")
-
-
-if __name__ == "__main__":
-    model = 'outputs/comp-perc-1e/'
-    cuda = False
-    input = 'tests/inferences/full-ep/test.txt'
-    output = 'output.txt'
-
-    run_rpunct(
-        model_location=model,
-        input_txt=input,
-        output_txt=output,
-        use_cuda=cuda
-    )
