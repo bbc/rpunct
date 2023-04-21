@@ -31,17 +31,17 @@ List of text featured available for recovery:
 
 ## Usage:
 
-1. Pull the model files from bbc-data:
+1. Pull the model files from bbc-data: \
    `bbc-data pull bbc/rpunct:0.0.1`
-2. Install the BBC Punctuator system from Git:
-   `git clone git@github.com:bbc/rpunct.git`
-   `cd rpunct`
+2. Install the BBC Punctuator system from Git: \
+   `git clone git@github.com:bbc/rpunct.git` \
+   `cd rpunct` \
    `pip install -r requirements.txt`
-3. Move the model files to the reference location within bbc-punctuator:
+3. Move the model files to the reference location within bbc-punctuator: \
    `mv $(bbc-data path bbc/rpunct) model-files`
 4. Run the BBC Punctuator by pointing the run file to the model files (from inside the cloned repo):
 
-   1. To punctuate a plaintext (.txt) file from the command line:
+   1. To punctuate a plaintext (.txt) file from the command line: \
       `python run.py rpunct -m model-files -i input_file_path.txt -o output_file_path.txt`
    2. To use bbc-punctuator within a python script (from within the `rpunct`
       directory):
@@ -50,9 +50,9 @@ List of text featured available for recovery:
       from rpunct.rpunct_recoverer import RPunctRecoverer
 
       punctuator = RPunctRecoverer()
-      text = 'hello and welcome to the bbc punctuator \
+      text = "hello and welcome to the bbc punctuator \
       this is an example piece of plaintext \
-      that exhibits no punctuation or capitalisation'
+      that exhibits no punctuation or capitalisation"
 
       punctuated_text = punctuator.process(text)
       ```
