@@ -21,7 +21,7 @@ WORDS_PER_FILE = 35000000
 def e2e_data(data_type='news-transcripts', tt_split='90:10',
             start_year='2014', end_year='2022', summaries=False,
             composite_datasets_list=None, dataset_balance='o',
-            validation=False, dataset_stats=False):
+            validation=False, dataset_stats=False, form_mixed_case_database=False):
     """
     Full pipeline for gathering/loading data and formatting it into training and testing datasets to be used by RPunct.
 
@@ -112,7 +112,8 @@ def e2e_data(data_type='news-transcripts', tt_split='90:10',
     # Create dataset for each stage (train/test)
     for stage in stages:
         # Constuct list of text and labels (punctuation tag per word)
-        rpunct_dataset = create_rpunct_dataset(dataset_path, data_source, train_or_test=stage)
+        form_mixed_case_database = form_mixed_case_database and stage == 'train'
+        rpunct_dataset = create_rpunct_dataset(dataset_path, data_source, train_or_test=stage, make_mc_database=form_mixed_case_database)
 
         create_training_samples(rpunct_dataset, data_source, file_out_path=dataset_path, train_or_test=stage)
         del rpunct_dataset
@@ -126,7 +127,7 @@ def e2e_data(data_type='news-transcripts', tt_split='90:10',
     print("\n> Data generation and preparation complete")
 
 
-def create_rpunct_dataset(directory, data_type, train_or_test='train', make_mc_database=False):
+def create_rpunct_dataset(directory, data_type, train_or_test='train', make_mc_database=True):
     """
     Converts CSV files of punctuated text data into plaintext labelled word-level training/testing data (list of 'records')
     for supervised learning of punctuation restoration.
@@ -201,17 +202,16 @@ def create_record(text, mixed_casing=False):
         # Convert word to plaintext
         stripped_obs = re.sub(r"[^0-9a-zA-Z]", "", obs)
 
-        if stripped_obs.endswith("'"):  # Remove any remaining trailing apostrophes (only leave mid-word apostrophes)
-            stripped_obs = stripped_obs[:-1]
-
         if not stripped_obs:
             continue
 
         # Collect trailing punctuation for this word's label
         if not obs[-1].isalnum() and obs[-1] in PUNCT_LABELS:
             new_lab = obs[-1]
+            unpunct_obs = obs[:-1]
         else:
             new_lab = "O"  # `O` => no punctuation
+            unpunct_obs = obs
 
         # Add a capitalisation descriptor to the label
         if stripped_obs.islower() or stripped_obs.isnumeric():
@@ -225,19 +225,17 @@ def create_record(text, mixed_casing=False):
 
             # Populate database of mixed-case instances
             if mixed_casing:
-                if not stripped_obs[0].isalnum():
-                    stripped_obs = stripped_obs[1:]
+                if unpunct_obs.endswith("'s"):
+                    unpunct_key = unpunct_obs[:-2]
+                else:
+                    unpunct_key = unpunct_obs
 
-                if not stripped_obs[-1].isalnum():
-                    stripped_obs = stripped_obs[:-1]
-
-                if stripped_obs[-1:] != 's' and stripped_obs.lower() not in mixed_case.keys():
-                    mixed_case.update({stripped_obs.lower(): stripped_obs})
+                if unpunct_key.lower() not in mixed_case.keys():
+                    mixed_case.update({unpunct_key.lower(): unpunct_key})
 
         # Add the word and its label to the dataset
         # N.B. some punctuation is retained in label word (any thats restored by `number_recoverer` not the model: e.g. %, £, etc.)
-        partially_stripped_obs = re.sub(r"[^0-9a-zA-Z'%£$€¥]", "", obs).lower()
-        new_obs.append({'sentence_id': 0, 'words': partially_stripped_obs, 'labels': new_lab})
+        new_obs.append({'sentence_id': 0, 'words': unpunct_obs, 'labels': new_lab})
 
     return new_obs, mixed_case
 
