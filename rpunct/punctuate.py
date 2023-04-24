@@ -12,6 +12,8 @@ from time import time
 from tqdm import tqdm
 from simpletransformers.ner import NERModel
 
+from langdetect import detect
+
 # VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
 # PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']
 PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!']
@@ -47,7 +49,7 @@ class RestorePuncts:
 
         self._memory_buffer = ""
 
-    def punctuate(self, text:str, strict_sentence_boundaries:bool=True):
+    def punctuate(self, input_text:str, strict_sentence_boundaries:bool=True):
         """
         Performs punctuation restoration on plaintext (in English only).
 
@@ -58,16 +60,21 @@ class RestorePuncts:
             - punct_text (str): fully punctuated output text.
         """
         # Restoration pipeline
-        model_segments = self.segment_text_blocks(text)  # Format input text such that it can be easily passed to the transformer model
+        model_segments = self.segment_text_blocks(input_text)  # Format input text such that it can be easily passed to the transformer model
         preds_lst = self.predict(model_segments)  # Generate word-level punctuation predictions
-        combined_preds = self.combine_results(preds_lst, text)  # Combine a list of text segments and their predictions into a single sequence
+
+        if preds_lst is None:
+            print(" * Failed to produce punctuation predictions on a given input text")
+            return input_text
+
+        combined_preds = self.combine_results(preds_lst)  # Combine a list of text segments and their predictions into a single sequence
         punct_text = self.punctuate_texts(combined_preds, strict_sentence_boundaries)  # Apply the punctuation predictions to the text
 
         return punct_text
 
-    def punctuate_segments(self, segments:list, strict_sentence_boundaries:bool=True):
+    def punctuate_segments(self, input_segments:list, strict_sentence_boundaries:bool=True):
         # Define segment boundaries s.t. they can be restored after being fed through the model
-        segment_lengths = [len(s.split()) for s in segments]
+        segment_lengths = [len(s.split()) for s in input_segments]
         segment_boundaries = [(0, 0)]
 
         for length in segment_lengths:
@@ -78,14 +85,20 @@ class RestorePuncts:
         segment_boundaries = segment_boundaries[1:]
 
         # Make predictions over entire concatenated text
-        text_block = " ".join(segments)
+        text_block = " ".join(input_segments)
         model_segments = self.segment_text_blocks(text_block)
 
         predictions = self.predict(model_segments)
-        combined_predictions = self.combine_results(predictions, text_block)
+
+        if predictions is None:
+            print(" * Failed to produce punctuation predictions on the given input text")
+            return input_segments
+
+        combined_predictions = self.combine_results(predictions)
 
         # Break predictions back down into segments and apply pnctuation predictions
         segmented_predictions = [combined_predictions[start: end] for start, end in segment_boundaries]
+
         punct_text = []
         punct_text = [self.punctuate_texts(pred, strict_sentence_boundaries) for pred in segmented_predictions]
 
@@ -105,21 +118,26 @@ class RestorePuncts:
         Passes the unpunctuated text to the model for punctuation.
         """
         text_segments = [i['text'] for i in input_segments]
+
         predictions = self.model.predict(text_segments)
         predicted_segments = predictions[0]
+
+        for orig, pred in zip(text_segments, predicted_segments):
+            if len(orig.split()) != len(pred):
+                return None
 
         return predicted_segments
 
     @staticmethod
-    def segment_text_blocks(text:str, length:int=250, overlap:int=30):
+    def segment_text_blocks(text:str, body_len:int=250, overlap_len:int=30):
         """
         Splits a string of text into predefined slices of overlapping text with indexes linked back to the original text.
         This is done to bypass 512 token limit on transformer models by sequentially feeding segments of <512 tokens.
 
         Args:
             - text (str): input string of text to be split.
-            - length (int): number of words in the (non-overlapping portion of) the otuput text segment.
-            - overlap (int): number of words to overlap between text segements.
+            - body_len (int): number of words in the (non-overlapping portion of) the output text segment.
+            - overlap_len (int): number of words to overlap between text segements.
 
         Returns:
             - resp (lst): list of dicts specifying each text segment (containing the text and its start/end indices).
@@ -134,16 +152,21 @@ class RestorePuncts:
 
         while True:
             # Words in the chunk and the overlapping portion
-            wrds_len = wrds[(length * i):(length * (i + 1))]
-            wrds_ovlp = wrds[(length * (i + 1)):((length * (i + 1)) + overlap)]
-            wrds_split = wrds_len + wrds_ovlp
+            body_start = body_len * i
+            body_end = body_len * (i + 1)
+            wrds_in_body = wrds[body_start : body_end]
+
+            overlap_end = (body_len * (i + 1)) + overlap_len
+            wrds_in_overlap = wrds[body_end : overlap_end]
+
+            wrds_split = wrds_in_body + wrds_in_overlap
 
             # Break loop if no more words
             if not wrds_split:
                 break
 
             wrds_str = " ".join(wrds_split)
-            nxt_chunk_start_idx = len(" ".join(wrds_len))
+            nxt_chunk_start_idx = len(" ".join(wrds_in_body))
             lst_char_idx = len(" ".join(wrds_split))
 
             # Text segment object
@@ -160,39 +183,17 @@ class RestorePuncts:
         return resp
 
     @staticmethod
-    def combine_results(text_slices:list, original_text:str):
+    def combine_results(predicted_text_blocks:list, body_len:int=250):
         """
-        Given a full text and predictions of each slice combines the segmented predictions into a single text again.
+        Given a full text and predictions of each slice combines the segmented predictions into a single text again
+        (i.e. inverse function of `segment_text_blocks`).
         """
-        original_text_lst = original_text.replace('\n', ' ').split(" ")
-        original_text_lst = [i for i in original_text_lst if i]  # remove any empty strings
-        original_text_len = len(original_text_lst)
         output_text = []
-        index = 0
 
-        # Remove final element of prediction list for formatting
-        if len(text_slices[-1]) <= 3 and len(text_slices) > 1:
-            text_slices = text_slices[:-1]
-
-        # Cycle thrugh slices in the full prediction
-        for _slice in text_slices:
-            slice_wrds = len(_slice)
-
-            # Cycle through words in each slice
-            for ix, wrd in enumerate(_slice):
-                if index == original_text_len:
-                    break
-
-                # Add each (non-overlapping) word and its associated prediction to output text
-                if (original_text_lst[index] == str(list(wrd.keys())[0])) and (ix <= slice_wrds - 3) and (text_slices[-1] != _slice):
-                    index += 1
-                    pred_item_tuple = list(wrd.items())[0]
-                    output_text.append(pred_item_tuple)
-
-                elif (original_text_lst[index] == str(list(wrd.keys())[0])) and (text_slices[-1] == _slice):
-                    index += 1
-                    pred_item_tuple = list(wrd.items())[0]
-                    output_text.append(pred_item_tuple)
+        for block in predicted_text_blocks:
+            pairs_in_body = block[:body_len]
+            flattened_body = [list(wrd.items())[0] for wrd in pairs_in_body]
+            output_text.extend(flattened_body)
 
         return output_text
 
@@ -237,7 +238,7 @@ class RestorePuncts:
                 punct_wrd = punct_wrd.capitalize()
 
             # Add classified punctuation mark (and space) after word
-            if label[0] != "O" and punct_wrd[-1] not in valid_punctuation:
+            if label[0] != "O" and punct_wrd[-1] not in valid_punctuation and label[0] != punct_wrd[-1]:
                 punct_wrd += label[0]
 
             punct_resp += punct_wrd + " "
