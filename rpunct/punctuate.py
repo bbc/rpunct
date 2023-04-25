@@ -5,14 +5,9 @@ __author__ = "Daulet N."
 __email__ = "daulet.nurmanbetov@gmail.com"
 
 import re
-import os
 import json
 import warnings
-from time import time
-from tqdm import tqdm
 from simpletransformers.ner import NERModel
-
-from langdetect import detect
 
 # VALID_LABELS = ["OU", "OO", ".O", "!O", ",O", ".U", "!U", ",U", ":O", ";O", ":U", "'O", "-O", "?O", "?U"]
 # PUNCT_LABELS = ['O', '.', ',', ':', ';', "'", '-', '?', '!', '%']

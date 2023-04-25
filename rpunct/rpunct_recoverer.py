@@ -327,24 +327,6 @@ class RPunctRecoverer:
             index_orig += 1
             index_rec += 1
 
-        # # Verify all recovered words have been itemised
-        # try:
-        #     assert index_rec == len(recovered_segment), \
-        #         f"While reconstructing segment structure, one or more recovered words have been missed. \
-        #             \n Original text: {[item.content for item in original_segment]} \
-        #             \n Recovered text: {[item.content for item in recovered_segment]}"
-        # except AttributeError:
-        #     assert index_rec == len(recovered_segment), \
-        #         f"While reconstructing segment structure, one or more recovered words have been missed. \
-        #             \n Original text: {[item.content for item in original_segment]} \
-        #             \n Recovered text: {[item for item in recovered_segment]}"
-
-        # # Verify that the reconstructed segment is the same length as original (excluding words removed by hyphenation)
-        # assert len(recovered_segment) == (len(original_segment) - total_fewer_words), \
-        #     f"While reconstructing segment structure, a mistake has occured. \
-        #         \n Original text: {[item.content for item in original_segment]} \
-        #         \n Recovered text: {[item.content for item in recovered_segment]}"
-
         # Return new itemised segment to the list of segments
         return output_segment
 
@@ -377,15 +359,6 @@ class RPunctRecoverer:
         elif recovered_word.endswith('p') and not original_segment_words[0].endswith('p') and original_segment_words.count('pence') > 0:
             orig_text_removals = original_segment_words.index('pence')
             punct_text_removals = 0
-
-        # elif recovered_word.startswith('£') and not original_segment_words[0].startswith('£'):
-        #     numerical_removals = self.find_subword_index(['pound', 'pounds'], original_segment_words, recovered_words_lst, position)
-        # elif recovered_word.startswith('$') and not original_segment_words[0].startswith('$'):
-        #     numerical_removals = self.find_subword_index(['dollar', 'dollars'], original_segment_words, recovered_words_lst, position)
-        # elif recovered_word.startswith('€') and not original_segment_words[0].startswith('€'):
-        #     numerical_removals = self.find_subword_index(['euro', 'euros'], original_segment_words, recovered_words_lst, position)
-        # elif recovered_word.startswith('¥') and not original_segment_words[0].startswith('¥') and original_segment_words.count('yen') > 0:
-        #     numerical_removals = original_segment_words.index('yen')
 
         else:
             # Align original natural language numbers to recovered digits

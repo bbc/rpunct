@@ -4,9 +4,9 @@
 Module supporting punctuation recovery and post-processing of raw STT output.
 """
 import re
+import decimal
 from num2words import num2words
 from number_parser import parse as number_parser, parse_number as individual_number_parser
-import decimal
 
 try:
     from rpunct.utils import *
